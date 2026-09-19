@@ -12,7 +12,9 @@ import {
 } from "./routes/portfolio.js";
 import { getPrices, backfillPrices, getStatus } from "./routes/prices.js";
 import { runDaily, CRON_KR, CRON_US } from "./cron/daily.js";
+import { runWeekly, CRON_WEEKLY } from "./cron/weekly.js";
 import { listViews, latestViews, createView, patchView, deleteView } from "./routes/views.js";
+import { getFundamentals, refreshFundamentalsRoute } from "./routes/fundamentals.js";
 
 const ID = "(?<id>\\d+)";
 
@@ -47,6 +49,9 @@ const ROUTES = [
   ["POST", "/views", createView],
   ["PATCH", "/views/" + ID, patchView],
   ["DELETE", "/views/" + ID, deleteView],
+
+  ["GET", "/fundamentals/" + ID, getFundamentals],
+  ["POST", "/fundamentals/" + ID + "/refresh", refreshFundamentalsRoute],
 
   ["GET", "/prices/" + ID, getPrices],
   ["POST", "/prices/" + ID + "/backfill", backfillPrices],
@@ -108,5 +113,6 @@ export default {
   async scheduled(event, env, ctx) {
     const which = event.cron === CRON_KR ? "kr" : event.cron === CRON_US ? "us" : null;
     if (which) ctx.waitUntil(runDaily(env, which, new Date(event.scheduledTime)));
+    else if (event.cron === CRON_WEEKLY) ctx.waitUntil(runWeekly(env, new Date(event.scheduledTime)));
   },
 };

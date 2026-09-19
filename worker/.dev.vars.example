@@ -3,3 +3,5 @@ APP_TOKEN=local-dev-token
 # 스크린샷 가져오기를 키 없이 시험하려면 mock (가짜 행을 돌려준다)
 IMPORT_LLM_PROVIDER=mock
 ANTHROPIC_API_KEY=
+# 국내 DART 재무를 갱신할 때 사용. 없으면 네이버 재무 폴백만 사용한다.
+DART_API_KEY=

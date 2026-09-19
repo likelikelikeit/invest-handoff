@@ -19,6 +19,6 @@ IMPORT_LLM_PROVIDER = "anthropic"
 # IMPORT_LLM_MODEL = ""   # 비우면 공급자 기본 모델
 
 # 크론 (SPEC §7.3, UTC 고정). 문자열은 src/cron/daily.js의 CRON_KR/CRON_US와 같아야 한다.
-# 나머지(주간 재무, 거시, 어닝일)는 M5a·M7에서 추가한다.
+# 나머지(거시, 어닝일)는 M7에서 추가한다.
 [triggers]
-crons = ["0 7 * * 1-5", "0 22 * * 1-5"]
+crons = ["0 7 * * 1-5", "0 22 * * 1-5", "0 23 * * 0"]

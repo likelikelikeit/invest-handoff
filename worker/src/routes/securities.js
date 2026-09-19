@@ -14,6 +14,12 @@ const FIELDS = {
   ticker: (v) => str(v, "ticker"),
   ysym: (v) => str(v, "ysym"),
   isin: (v) => (v == null || v === "" ? null : str(v, "isin")),
+  dart_corp_code: (v) => {
+    if (v == null || v === "") return null;
+    const s = String(v).trim();
+    if (!/^\d{8}$/.test(s)) throw new HttpError(400, "dart_corp_code는 8자리 숫자여야 합니다");
+    return s;
+  },
   market: (v) => oneOf(v, MARKETS, "market"),
   currency: (v) => oneOf(v, CURRENCIES, "currency"),
   sector: (v) => (v == null || v === "" ? null : str(v, "sector")),
