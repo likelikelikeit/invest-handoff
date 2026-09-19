@@ -33,11 +33,15 @@ npx wrangler d1 execute invest --remote --file .seed/seed.sql
 |---|---|
 | `GET /portfolio` | 보유(종목 정보 포함) + 현금 |
 | `POST /portfolio/merge` | `{rows, asOwned}` ysym 기준 upsert. asOwned면 보유도 덮어씀 |
-| `PUT·DELETE /portfolio/positions/:securityId` | 보유 한 종목 |
+| `PUT·DELETE /portfolio/positions/:securityId` | 보유 한 종목 (수량이 바뀌면 응답 `changes`) |
+| `GET /portfolio/changes?pending=1`, `PATCH /portfolio/changes/:id` | 보유 변화 기록과 이유 `{reason}` 또는 `{skipped:true}` |
+| `GET·POST /portfolio/scenarios`, `DELETE /portfolio/scenarios/:id` | 저장한 시뮬 |
 | `GET·POST /securities`, `GET·PATCH·DELETE /securities/:id` | 종목. DELETE는 숨김(archived_at) |
 | `GET·POST /watchlist`, `DELETE /watchlist/:id` | 관심종목 |
 | `GET /cash`, `PUT /cash/KRW\|USD` | 현금 |
 | `GET /quotes?symbols=`, `GET /search?q=`, `POST /import?mt=` | 기존 worker.js 경로 |
+
+로컬에서 스크린샷 가져오기를 키 없이 시험하려면 `worker/.dev.vars`에 `IMPORT_LLM_PROVIDER=mock`을 넣는다(가짜 행을 돌려준다).
 
 Worker 로컬 비밀값은 `worker/.dev.vars.example`를 `worker/.dev.vars`로 복사해서 채운다.
 

@@ -584,6 +584,16 @@ CREATE TABLE meta (
 - merge는 서버 `POST /portfolio/merge`가 받는다(종목 ysym upsert, 기존 종목 이름은 유지, `asOwned`면 positions 덮어씀). `normalize`는 프론트 `web/src/lib/calc/`에서 먼저 거친다(M2에서 이식).
 - 시드는 `portfolio.json`의 `baseQty`/`baseAvg`(실제 보유 기준)를 쓰고, 평단이 원화 환산값이라 `avg_ccy='KRW'`.
 - 시각 문자열은 `views.created_at` 규칙(ISO 8601 + `+09:00`, 초 단위)을 모든 테이블에 쓴다.
+
+마일스톤 2에서 정한 것 (2026-09-19):
+- **시뮬은 연습장** (사용자 결정). 시뮬은 D1 `positions`를 절대 바꾸지 않는다. 기존 "기준 재설정"은 없애고 "실제 보유에서 다시 시작"으로 대체. 진행 중 시뮬은 기기 localStorage(`invest.sim`)에 임시 저장, "저장"하면 `portfolio_scenarios`(weights JSON에 종목별 수량·평단·가격·비중). 다시 열면 지금 시세로 가격이 붙는다.
+- 시뮬 행 순서는 **시작 평가액** 순으로 고정한다. 지금 평가액 순이면 슬라이더를 끄는 중에 행이 자리를 바꾼다.
+- 변화 감지(§5.1)는 **서버가 기록**한다. merge/PUT/DELETE 보유가 수량이 바뀌면 `position_changes`에 `reason NULL` 행을 넣고 응답 `changes`로 돌려준다. 앱은 시트로 이유를 묻고 `PATCH /portfolio/changes/:id`로 채운다. 시트를 닫아도 기록은 남고 앱을 다시 열면 미응답분을 다시 묻는다.
+- 로고: Brandfetch `<img>` 핫링크만(`ticker/{SYM}`, 국내는 6자리 코드로 계산한 ISIN `isin/KR7…`), `fallback/404`로 받아 실패 시 이니셜 레터마크. 약관이 프로그램 접근을 금지하므로 §6.2의 "CORS 막히면 Worker가 이미지를 프록시"는 **하지 않는다**. 브랜드색 자동 추출도 하지 않고, 종목 상세에서 직접 고른다(없으면 섹터 팔레트).
+- 스크린샷 가져오기: 티커가 없는 행은 이름이 같은 기존 종목의 심볼로 잇는다. 분류를 모르는 행은 기존 종목의 분류를 덮지 않는다.
+- 로컬 개발용 `IMPORT_LLM_PROVIDER=mock`(`.dev.vars`에서만)으로 키 없이 가져오기 흐름을 시험한다.
+- PWA: manifest + iOS 메타 + 최소 서비스 워커(캐시 없음). 오프라인 캐시는 M8.
+- `prompt()` 대신 바텀 시트로 이름을 받는다. 되돌릴 수 없는 동작(시뮬 버리기, 보유 정리)만 `confirm()`.
 - §3.3·§5.1·§5.5에서 "나중에 추가"라던 `securities.archived_at`, `securities.asset_class`, `position_changes`, `portfolio_scenarios`는 배포 전이라 `0001_init.sql`에 바로 넣었다.
 
 ### 7.2 인증 [확정: 1차]
