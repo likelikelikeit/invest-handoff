@@ -1,0 +1,10 @@
+portfolio.json
+.dev.vars
+.env
+node_modules/
+dist/
+.wrangler/
+.DS_Store
+.dev.vars.*
+*.local
+coverage/
