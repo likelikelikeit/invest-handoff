@@ -21,6 +21,30 @@ function account(list, ids, names) {
     list.find((x) => names.some((n) => String(x.account_nm || "").replace(/\s/g, "").includes(n)));
 }
 
+/**
+ * 사업보고서는 연간 누적만 있어 4분기 행이 없다. 연속 네 분기(TTM)를 만들려면 4분기가 필요하므로
+ * 4분기 = 연간 − (1·2·3분기)로 파생한다. 손익 흐름 항목만 빼고, 순차입금 같은 기말 잔액은 연간 값을 쓴다.
+ * EPS는 분기마다 주식수가 달라 근사치다. 1·2·3분기 중 하나라도 없으면 만들지 않는다.
+ */
+export function deriveQ4(rows) {
+  const out = [];
+  const fys = rows.filter((r) => r.source === "dart" && r.period_type === "FY");
+  for (const fy of fys) {
+    const y = fy.period_end.slice(0, 4);
+    const qs = ["-03-31", "-06-30", "-09-30"].map((d) =>
+      rows.find((r) => r.source === "dart" && r.period_type === "Q" && r.period_end === y + d));
+    if (qs.some((q) => !q)) continue;
+    const minus = (k) => (fy[k] == null || qs.some((q) => q[k] == null) ? null : fy[k] - qs.reduce((s, q) => s + q[k], 0));
+    out.push({
+      period_end: y + "-12-31", period_type: "Q", source: "dart",
+      revenue: minus("revenue"), operating_income: minus("operating_income"), net_income: minus("net_income"),
+      eps: minus("eps"), bps: null, ebitda: null, net_debt: fy.net_debt, shares_out: null,
+      raw: JSON.stringify({ derived: "FY - (Q1+Q2+Q3)", fy: fy.period_end }),
+    });
+  }
+  return out;
+}
+
 /** DART 전체 재무제표 응답 한 건 → financials 행. */
 export function parseDartStatement(data, year, report) {
   if (!data || data.status === "013" || !Array.isArray(data.list)) return null;
@@ -85,5 +109,5 @@ export async function dartFundamentals(apiKey, corpCode, now = new Date()) {
     else if (r.status === "rejected") errors.push(String(r.reason?.message || r.reason));
   }
   if (!financials.length && errors.length) throw new Error(errors[0]);
-  return { financials, estimates: [], earningsDate: null, errors };
+  return { financials: financials.concat(deriveQ4(financials)), estimates: [], earningsDate: null, errors };
 }
