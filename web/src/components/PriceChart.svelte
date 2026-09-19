@@ -3,18 +3,18 @@
   // 스크러빙하면 위 숫자가 그 날짜의 종가·기간 대비 변화로 바뀐다. 손을 떼면 최신값으로 돌아간다.
   // 선 색은 기간 수익률 부호를 따른다 (상승 빨강 · 하락 파랑).
   import { onMount } from "svelte";
-  import { createChart, AreaSeries, HistogramSeries, ColorType, CrosshairMode, LineStyle } from "lightweight-charts";
-  import { RANGES, sliceRange, availableRanges, periodChange } from "../lib/calc/chart.js";
+  import { createChart, AreaSeries, HistogramSeries, LineSeries, ColorType, CrosshairMode, LineStyle, LineType } from "lightweight-charts";
+  import { RANGES, sliceRange, availableRanges, periodChange, targetLine } from "../lib/calc/chart.js";
   import { store } from "../lib/storage.js";
   import { pctSigned, tone } from "../lib/format.js";
 
-  /** rows: [[date, o, h, l, c, v]], fmt: 가격 문자열 함수 */
-  let { rows, fmt, stampText = "" } = $props();
+  /** rows: [[date, o, h, l, c, v]], fmt: 가격 문자열 함수, targets: [{date, value}] 내 목표가 이력(계단선, 선택) */
+  let { rows, fmt, stampText = "", targets = null } = $props();
 
   const KEY = "invest.chartRange";
   let range = $state(store.get(KEY, "1y"));
   let el = $state();
-  let chart, area, vol;
+  let chart, area, vol, tgt;
   let hover = $state(null); // { date, close, idx }
 
   const avail = $derived(availableRanges(rows));
@@ -39,12 +39,14 @@
     });
     area.applyOptions({ lineColor: line, topColor: line + "38", bottomColor: line + "00" });
     vol.applyOptions({ color: css("--line") });
+    if (tgt) tgt.applyOptions({ color: css("--ink") });
   }
 
   function load() {
     if (!chart) return;
     area.setData(shown.map((r) => ({ time: r[0], value: r[4] })));
     vol.setData(shown.filter((r) => r[5] != null).map((r) => ({ time: r[0], value: r[5] })));
+    if (tgt) tgt.setData(targetLine(targets, shown));
     chart.timeScale().fitContent();
     paint();
   }
@@ -67,6 +69,14 @@
     area = chart.addSeries(AreaSeries, { lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerRadius: 4 });
     vol = chart.addSeries(HistogramSeries, { priceScaleId: "vol", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.84, bottom: 0 }, visible: false });
+    if (targets) {
+      tgt = chart.addSeries(LineSeries, {
+        lineWidth: 1.5, lineStyle: LineStyle.Dashed, lineType: LineType.WithSteps,
+        // 현재 목표가는 차트 전체를 가로지르는 점선(의견이 하나뿐이어도 보이게), 변화는 계단선
+        priceLineVisible: true, priceLineStyle: LineStyle.Dotted, priceLineWidth: 1,
+        lastValueVisible: true, crosshairMarkerVisible: false, title: "목표",
+      });
+    }
 
     let lastTime = null;
     chart.subscribeCrosshairMove((p) => {
@@ -128,6 +138,7 @@
   // 기간이나 데이터가 바뀌면 다시 그린다
   $effect(() => {
     shown;
+    targets;
     load();
   });
 

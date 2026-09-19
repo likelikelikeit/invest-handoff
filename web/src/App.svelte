@@ -12,10 +12,12 @@
   import Security from "./routes/Security.svelte";
   import Portfolio from "./routes/Portfolio.svelte";
   import More from "./routes/More.svelte";
+  import Views from "./routes/Views.svelte";
   import Fab from "./components/Fab.svelte";
   import AddSheet from "./components/AddSheet.svelte";
   import ImportSheet from "./components/ImportSheet.svelte";
   import ChangeSheet from "./components/ChangeSheet.svelte";
+  import ViewForm from "./components/ViewForm.svelte";
 
   const current = $derived(activeTab(route.parts));
   const titles = Object.fromEntries(TABS.map((t) => [t.key, t.label]));
@@ -55,10 +57,12 @@
       <Securities />
     {:else if current === "portfolio"}
       <Portfolio />
+    {:else if current === "views"}
+      <Views />
     {:else if current === "more"}
       <More />
     {:else}
-      <Placeholder title={titles[current]} note="마일스톤 4에서 만듭니다" />
+      <Placeholder title={titles[current]} note="준비 중" />
     {/if}
   </main>
 
@@ -66,6 +70,7 @@
   <AddSheet />
   <ImportSheet />
   <ChangeSheet />
+  <ViewForm />
 
   {#if ui.toast}<div class="toast" role="status">{ui.toast}</div>{/if}
 </div>

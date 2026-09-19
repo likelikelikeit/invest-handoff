@@ -1,14 +1,17 @@
 <script>
   // 종목 상세: 헤더(가격·등락), 개요(차트·52주·거래량), 내 보유, 보유 수정/정리, 분류·브랜드색 편집.
-  // 밸류에이션·재무·의견 세그먼트는 M4~M5b에서 붙는다 (SPEC §4.3).
+  // 내 의견(M4). 밸류에이션·재무 세그먼트는 M5a~M5b에서 붙는다 (SPEC §4.3).
   import PageHead from "../components/PageHead.svelte";
   import Gate from "../components/Gate.svelte";
   import Section from "../components/Section.svelte";
   import Logo from "../components/Logo.svelte";
   import Overview from "../components/Overview.svelte";
+  import MyViews from "../components/MyViews.svelte";
+  import RatingChip from "../components/RatingChip.svelte";
+  import { upsideNow } from "../lib/calc/views.js";
   import { data, load, refreshQuotes } from "../lib/data.svelte.js";
   import { api } from "../lib/api.js";
-  import { askChanges, toast } from "../lib/ui.svelte.js";
+  import { ui, askChanges, toast } from "../lib/ui.svelte.js";
   import { holdingFromPosition } from "../lib/calc/portfolio.js";
   import { assignColors, SECTOR_NAMES } from "../lib/calc/colors.js";
   import { won, wonSigned, pctSigned, qtyStr, tone, parseNum, stamp, valueFmt } from "../lib/format.js";
@@ -31,6 +34,9 @@
     return assignColors(all).get(id);
   });
   const day = $derived(q && q.prevClose ? (q.price / q.prevClose - 1) * 100 : null);
+  // 현재 의견 = 최신 행 (SPEC §4.3 헤더: 내 목표가 · 상승여력 · 현재 등급)
+  const view = $derived(data.views.find((v) => v.security_id === id));
+  const up = $derived(view && q ? upsideNow(view, q.price) : null);
 
   async function fetchSec() {
     err = "";
@@ -111,9 +117,28 @@
       {/if}
     </div>
 
+    {#if sec.asset_class === "equity"}
+      <div class="mine-view">
+        {#if view}
+          <span class="mv num">내 목표 {valueFmt(sec)(view.target_price)}</span>
+          {#if up != null}<span class="mv num {tone(up * 1e6)}">상승여력 {pctSigned(up * 100)}</span>{/if}
+          <RatingChip rating={view.rating} score={view.rating_score} />
+        {:else}
+          <span class="mv flat">의견 없음</span>
+        {/if}
+        <button class="btn sm primary" onclick={() => (ui.viewForm = { securityId: id })}>새 의견 기록</button>
+      </div>
+    {/if}
+
     <Section id="sd-overview" title="개요">
       <Overview {id} fmt={valueFmt(sec)} quote={q} />
     </Section>
+
+    {#if sec.asset_class === "equity"}
+      <Section id="sd-views" title="내 의견" note={view ? "최근 " + stamp(view.created_at) : ""}>
+        <MyViews {id} fmt={valueFmt(sec)} />
+      </Section>
+    {/if}
 
     {#if h}
       <Section id="sd-mine" title="내 보유">
@@ -147,7 +172,7 @@
       <p class="hint">야후 심볼 {sec.ysym}</p>
     </Section>
 
-    <p class="later">밸류에이션·재무·내 의견은 다음 마일스톤에서 여기에 붙습니다.</p>
+    <p class="later">밸류에이션·재무는 다음 마일스톤에서 여기에 붙습니다.</p>
   {/if}
 </Gate>
 
@@ -155,7 +180,10 @@
   .sh{display:flex;align-items:center;gap:14px;margin-top:-10px}
   h1{font-size:clamp(22px,3vw,28px);font-weight:720;letter-spacing:-.025em;line-height:1.2}
   .sub{font-size:13px;color:var(--sub2)}
-  .price{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:14px 0 18px}
+  .price{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:14px 0 8px}
+  .mine-view{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 0 16px}
+  .mv{font-size:14px;font-weight:600}
+  .mine-view .btn{margin-left:auto}
   .p{font-size:clamp(28px,6vw,36px);font-weight:700;letter-spacing:-.03em}
   .d{font-size:16px;font-weight:600}
   .k{font-size:14px;color:var(--sub)}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sliceRange, availableRanges, periodChange, range52w, volumeStats } from "./chart.js";
+import { sliceRange, availableRanges, periodChange, range52w, volumeStats, targetLine } from "./chart.js";
 
 // 2021-09-20부터 하루씩, n일
 function days(n, start = "2021-09-20", f = (i) => 100 + i) {
@@ -62,5 +62,21 @@ describe("volumeStats", () => {
     const v = volumeStats(rows);
     expect(v.last).toBe(1029);
     expect(v.avg20).toBe((1009 + 1028) / 2);
+  });
+});
+
+describe("targetLine", () => {
+  const rows = [["2026-09-01"], ["2026-09-10"], ["2026-09-18"]];
+  it("오늘 기록한 의견(마지막 봉 뒤)은 마지막 봉에 붙는다", () => {
+    expect(targetLine([{ date: "2026-09-19", value: 280 }], rows)).toEqual([{ time: "2026-09-18", value: 280 }]);
+  });
+  it("기간 이전 의견은 시작점에서 이어받고, 끝까지 연장", () => {
+    expect(targetLine([{ date: "2026-08-01", value: 100 }, { date: "2026-09-10", value: 120 }], rows)).toEqual([
+      { time: "2026-09-01", value: 100 }, { time: "2026-09-10", value: 120 }, { time: "2026-09-18", value: 120 },
+    ]);
+  });
+  it("같은 날 둘이면 나중 것, 없으면 빈 배열", () => {
+    expect(targetLine([{ date: "2026-09-10", value: 1 }, { date: "2026-09-10", value: 2 }], rows).map((p) => p.value)).toEqual([2, 2]);
+    expect(targetLine([], rows)).toEqual([]);
   });
 });

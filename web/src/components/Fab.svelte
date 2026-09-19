@@ -1,5 +1,5 @@
 <script>
-  // 전역 + 버튼 (SPEC §4.7). M2: 스크린샷 가져오기 / 종목 추가. 의견 기록(M4)·판정(M6)은 해당 마일스톤에서.
+  // 전역 + 버튼 (SPEC §4.7): 스크린샷 가져오기 / 의견 기록 / 종목 추가. 판정(M6)은 해당 마일스톤에서.
   import Sheet from "./Sheet.svelte";
   import { ui } from "../lib/ui.svelte.js";
 
@@ -18,6 +18,7 @@
 <Sheet bind:open title="추가">
   <ul class="menu">
     <li><button onclick={() => go(() => (ui.importOpen = true))}><span class="m1">스크린샷 가져오기</span><span class="m2">증권사 보유 화면으로 한 번에 갱신</span></button></li>
+    <li><button onclick={() => go(() => (ui.viewForm = {}))}><span class="m1">의견 기록</span><span class="m2">목표가 · 등급 · 논리</span></button></li>
     <li><button onclick={() => go(() => (ui.add = {}))}><span class="m1">종목 추가</span><span class="m2">보유 등록 · 매수 시뮬 · 관심</span></button></li>
   </ul>
 </Sheet>

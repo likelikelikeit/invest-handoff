@@ -14,8 +14,26 @@ export const data = $state({
   error: "",
   quoteErrors: [],
   market: [], // 시장 띠: 지수·환율 securities
+  views: [], // 종목별 현재 투자의견 (/views/latest)
   loaded: false,
 });
+
+/** 종목 통화 기준 지금 가격 (의견 상승여력 계산용) */
+export function nativePrice(ysym) {
+  const q = data.quotes[ysym];
+  return q && typeof q.price === "number" ? q.price : null;
+}
+
+export async function loadViews() {
+  try {
+    data.views = (await api("/views/latest")).views;
+    const missing = data.views.map((v) => v.ysym).filter((s) => !data.quotes[s]);
+    if (missing.length) await refreshQuotes(missing);
+  } catch {
+    data.views = [];
+  }
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("views-changed"));
+}
 
 /** 보유 → 원화 holding 목록 (평가액 큰 순) */
 export function holdings() {
@@ -60,6 +78,7 @@ export async function load() {
       .sort((a, b) => MARKET_ORDER.indexOf(a.ysym) - MARKET_ORDER.indexOf(b.ysym));
     data.loaded = true;
     await refreshQuotes(data.market.map((s) => s.ysym));
+    await loadViews();
   } catch (e) {
     data.error = e.message;
   } finally {

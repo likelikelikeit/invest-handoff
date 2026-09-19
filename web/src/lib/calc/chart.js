@@ -68,3 +68,26 @@ export function volumeStats(rows) {
   const avg20 = tail.length ? tail.reduce((a, r) => a + r[5], 0) / tail.length : null;
   return { last, avg20, ratio: avg20 ? last / avg20 : null };
 }
+
+/**
+ * 목표가 계단선 점들. targets = [{date, value}] (의견 기록일, 목표가), rows = 보이는 일봉.
+ * 각 의견 날짜부터 다음 의견까지 수평, 마지막 의견은 차트 끝까지 이어진다.
+ * 보이는 기간 이전의 의견은 기간 시작점에서 이어받고, 마지막 봉보다 뒤(오늘 기록)면 마지막 봉에 붙인다.
+ * 같은 날짜에 둘이면 나중 것.
+ */
+export function targetLine(targets, rows) {
+  if (!targets || !targets.length || !rows.length) return [];
+  const from = rows[0][0];
+  const to = rows[rows.length - 1][0];
+  const sorted = [...targets].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const byDate = new Map();
+  let carry = null;
+  for (const t of sorted) {
+    if (t.date < from) carry = t.value;
+    else byDate.set(t.date > to ? to : t.date, t.value);
+  }
+  if (carry != null && !byDate.has(from)) byDate.set(from, carry);
+  const pts = [...byDate.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([time, value]) => ({ time, value }));
+  if (pts.length && pts[pts.length - 1].time < to) pts.push({ time: to, value: pts[pts.length - 1].value });
+  return pts;
+}
