@@ -1,3 +1,5 @@
 # 복사해서 .dev.vars 로 쓴다 (.dev.vars 는 커밋 금지).
-APP_TOKEN=로컬-개발용-아무-문자열
+APP_TOKEN=local-dev-token
+# 스크린샷 가져오기를 키 없이 시험하려면 mock (가짜 행을 돌려준다)
+IMPORT_LLM_PROVIDER=mock
 ANTHROPIC_API_KEY=

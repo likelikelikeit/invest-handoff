@@ -43,15 +43,27 @@ async function anthropic({ env, model, mediaType, b64 }) {
   return { text, usage: out.usage || null };
 }
 
+// 로컬 개발·테스트용: 이미지를 보지 않고 정해진 가짜 행을 돌려준다. .dev.vars에서만 켠다.
+// 이미 있는 종목(수량 변화), 새 종목, 읽기 실패 행을 섞어 미리보기·변화 감지를 확인할 수 있게 했다.
+async function mock() {
+  const rows = [
+    { name: "삼성전자", ticker: "005930", currency: "KRW", qty: 8, avgPrice: 71000, currentPrice: null, marketValue: null, profit: null },
+    { name: "애플", ticker: "AAPL", currency: "USD", qty: 2, avgPrice: 190.5, currentPrice: 228.1, marketValue: null, profit: null },
+    { name: "", ticker: "", currency: "KRW", qty: null, avgPrice: null, currentPrice: null, marketValue: null, profit: null },
+  ];
+  return { text: "```json\n" + JSON.stringify({ rows }) + "\n```", usage: null };
+}
+
 const PROVIDERS = {
   anthropic: { keyName: "ANTHROPIC_API_KEY", defaultModel: "claude-sonnet-5", call: anthropic },
+  mock: { keyName: null, defaultModel: "mock", call: mock },
 };
 
 export function importProvider(env) {
   const name = env.IMPORT_LLM_PROVIDER || "anthropic";
   const p = PROVIDERS[name];
   if (!p) return { error: "알 수 없는 IMPORT_LLM_PROVIDER: " + name };
-  if (!env[p.keyName]) return { error: "워커에 " + p.keyName + " 시크릿이 없습니다 (스크린샷 가져오기 꺼짐)" };
+  if (p.keyName && !env[p.keyName]) return { error: "워커에 " + p.keyName + " 시크릿이 없습니다 (스크린샷 가져오기 꺼짐)" };
   return { name, model: env.IMPORT_LLM_MODEL || p.defaultModel, call: p.call };
 }
 

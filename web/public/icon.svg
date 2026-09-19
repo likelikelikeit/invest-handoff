@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 앱 아이콘: 자산 도넛. 원본 SVG, PNG는 scripts/icons.mjs로 만든다. -->
+  <rect width="512" height="512" fill="#ffffff"/>
+  <g transform="rotate(-90 256 256)" fill="none" stroke-width="72">
+    <circle cx="256" cy="256" r="150" stroke="#eef0f3"/>
+    <circle cx="256" cy="256" r="150" stroke="#0a4d9e" stroke-dasharray="330 612.5"/>
+    <circle cx="256" cy="256" r="150" stroke="#0071e3" stroke-dasharray="230 712.5" stroke-dashoffset="-338"/>
+    <circle cx="256" cy="256" r="150" stroke="#68b0f8" stroke-dasharray="150 792.5" stroke-dashoffset="-576"/>
+    <circle cx="256" cy="256" r="150" stroke="#34c759" stroke-dasharray="90 852.5" stroke-dashoffset="-734"/>
+    <circle cx="256" cy="256" r="150" stroke="#ff2d55" stroke-dasharray="90 852.5" stroke-dashoffset="-832"/>
+  </g>
+</svg>
