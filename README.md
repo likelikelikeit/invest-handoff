@@ -3,7 +3,7 @@
 개인 투자 관리·리서치 웹앱. 설계는 [SPEC.md](SPEC.md), 에이전트 작업 규약은 [AGENTS.md](AGENTS.md).
 
 - 프론트 `web/` — Svelte 5 + Vite, GitHub Pages (`https://likelikelikeit.github.io/invest-handoff/`)
-- 백엔드 `worker/` — Cloudflare Worker `invest-api` + D1 `invest`
+- 백엔드 `worker/` — Cloudflare Worker `invest-api` (`https://invest-api.hyungjin0416.workers.dev`) + D1 `invest`
 
 ## 로컬 개발
 

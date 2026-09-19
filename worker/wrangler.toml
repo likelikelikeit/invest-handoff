@@ -7,7 +7,7 @@ compatibility_date = "2026-09-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "invest"
-database_id = "REPLACE_WITH_D1_ID"
+database_id = "50f995f4-8055-4b85-94c5-a90aeba7abf8"
 migrations_dir = "migrations"
 
 [vars]
