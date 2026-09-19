@@ -14,6 +14,11 @@ import { nowIso } from "../lib/time.js";
 export const CRON_MISC = "30 23 * * *";
 const MAX_EARNINGS = 15;
 
+/** ETF처럼 실적 일정 자체가 없는 심볼은 Yahoo quoteSummary가 404를 준다. 크론 오류로 세지 않는다. */
+export function isEarningsUnavailable(error) {
+  return error?.status === 404 || /(?:^|\D)404(?:\D|$)|not found/i.test(String(error?.message || error));
+}
+
 /** 백필이면 과거 전체(기준금리 경로 그래프용), 아니면 최근 60일 */
 function startDate(now, backfill) {
   if (backfill) return "2015-01-01";
@@ -55,7 +60,7 @@ export async function runMisc(env, now = new Date(), { backfill = false } = {}) 
         earnings++;
       }
     } catch (e) {
-      errors.push(s.ysym + ": " + String(e.message || e));
+      if (!isEarningsUnavailable(e)) errors.push(s.ysym + ": " + String(e.message || e));
     }
   }
 

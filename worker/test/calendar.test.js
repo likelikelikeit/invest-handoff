@@ -5,7 +5,10 @@ import { parseEcos, ecosDate } from "../src/sources/ecos.js";
 
 const fake = { earnings: { NVDA: "2026-11-17" }, fredFail: false };
 vi.mock("../src/sources/yahoo.js", () => ({
-  yahooEarningsDate: async (env, sym) => fake.earnings[sym] ?? null,
+  yahooEarningsDate: async (env, sym) => {
+    if (fake.earnings[sym] instanceof Error) throw fake.earnings[sym];
+    return fake.earnings[sym] ?? null;
+  },
 }));
 vi.mock("../src/sources/fred.js", async (orig) => ({
   ...(await orig()),
@@ -20,7 +23,7 @@ vi.mock("../src/sources/ecos.js", async (orig) => ({
 }));
 
 const { listEvents, createEvent, deleteEvent, getMacro, saveDots } = await import("../src/routes/calendar.js");
-const { runMisc } = await import("../src/cron/misc.js");
+const { runMisc, isEarningsUnavailable } = await import("../src/cron/misc.js");
 
 const H = {};
 const req = (b) => ({ json: async () => b });
@@ -93,6 +96,18 @@ describe("일정·거시 (실제 SQLite)", () => {
     const rep = await runMisc(env, new Date("2026-09-19T23:30:00Z"));
     expect(rep.macro.BOK_BASE).toBe(2);
     expect(rep.errors.filter((e) => e.includes("FRED_API_KEY"))).toHaveLength(3);
+  });
+
+  it("어닝일이 없는 ETF의 Yahoo 404는 조용히 건너뛴다", async () => {
+    const at = "2026-09-19T00:00:00+09:00";
+    env.DB.raw.prepare("INSERT INTO securities (name, ticker, ysym, market, currency, created_at, updated_at) VALUES (?,?,?,?,?,?,?)")
+      .run("SOXL", "SOXL", "SOXL", "US", "USD", at, at);
+    env.DB.raw.exec("INSERT INTO positions VALUES (6, 1, 1, 'KRW', 'manual', '" + at + "')");
+    fake.earnings.SOXL = new Error("야후 재무가 404 응답");
+    const rep = await runMisc(env, new Date("2026-09-19T23:30:00Z"));
+    expect(rep.earnings).toBe(1);
+    expect(rep.errors.some((e) => e.includes("SOXL"))).toBe(false);
+    expect(isEarningsUnavailable(fake.earnings.SOXL)).toBe(true);
   });
 
   it("점도표: 저장하면 최신 것이 조회되고, 다시 저장하면 교체", async () => {
