@@ -81,7 +81,8 @@
 | Yahoo `quoteSummary` (modules: `financialData,earningsTrend,calendarEvents,defaultKeyStatistics`) | 컨센서스 목표가·추천, fwd EPS, 다음 어닝일 | **crumb + 쿠키** (§7.4) | 주 1회 (어닝일은 매일) | 국내 종목은 데이터 얇음 |
 | Yahoo `/v1/finance/search?q=` | 종목 검색 | 없음 | 요청 시 | 이미 worker.js에 구현 |
 | 네이버페이 증권 모바일 내부 JSON | 국내 컨센서스(FnGuide), DART 부재 시 재무 폴백 | 없음 | 주 1회 | 비공식. M5a에서 `integration`, `finance/quarter`, `finance/annual` 확인 |
-| DART OpenAPI | 국내 공시, 분기 재무(XBRL) | 무료 API 키 | 주 1회 + 공시 매일 | |
+| DART OpenAPI | 국내 공시, 분기 재무(XBRL) | 무료 API 키 | 주 1회 + 공시 매일 | 이력이 부족한 종목은 일일 크론이 하나씩 보강 |
+| SEC EDGAR XBRL `companyconcept` | 미국 상장사 분기 재무 이력(밴드용 TTM) | 없음. User-Agent에 연락처 필수 | 로컬 스크립트 1회(`scripts/sec-history.mjs`) | 10-Q/10-K 제출사만(20-F 해외 기업·ETF 제외). 최근 분기는 야후가 채움 |
 | FRED | 미국 기준금리, 국채금리(2Y/10Y), CPI 등 | 무료 API 키 | 하루 1회 | |
 | 한국은행 ECOS | 한국 기준금리 | 무료 API 키 | 하루 1회 | |
 | Brandfetch Logo API `cdn.brandfetch.io/ticker/{SYM}/...?c={clientId}` | 종목 로고 | 무료 client ID (공개 가능) | `<img>` 핫링크만, 캐시 금지(약관) | 폴백: Parqet(ISIN) → 이니셜 레터마크 |
@@ -219,7 +220,7 @@ CREATE TABLE financials (
   net_debt         REAL,
   shares_out       REAL,
   raw              TEXT,                  -- JSON 원문
-  source           TEXT NOT NULL,         -- 'dart' | 'yahoo' | 'naver'(DART 키 없을 때 국내 폴백)
+  source           TEXT NOT NULL,         -- 'dart' | 'yahoo' | 'naver'(DART 키 없을 때 국내 폴백) | 'sec'(미국 과거 이력)
   fetched_at       TEXT NOT NULL,
   PRIMARY KEY (security_id, period_end, period_type)
 );
@@ -632,6 +633,11 @@ CREATE TABLE meta (
 - 시나리오 `assumptions`는 `metric`, `value`, `multiple`, `growth_pct`, `horizon_years`와 EV/EBITDA용 `net_debt`, `shares`를 저장한다. 같은 종목의 bear/base/bull은 현재 작업 가정이므로 이름별 upsert한다. base에서 의견을 열 때 목표가와 valuation JSON을 넘기며, 의견 행은 기존 사건 방식대로 새로 쓴다.
 - 의견 기록 시 `per_at`은 서버가 저장된 최근 네 분기 EPS와 기록 순간 가격으로 계산해 얼린다. 네 분기가 온전히 없거나 TTM EPS가 양수가 아니면 null이다.
 - 3년 TTM 밴드의 선행 네 분기를 확보하기 위해 Yahoo 재무 요청은 5년, DART는 최근 16개 보고서로 넓힌다. DART 16회와 국내 폴백을 포함해 외부 요청 40개 이하가 되도록 주간 크론은 최대 8종목씩 순환한다.
+- (Claude 이어받음) 야후·네이버는 요청 기간과 무관하게 **최근 5개 분기만** 준다. 그래서 밴드 이력은 아래로 보강했다(사용자 결정 "다 보강").
+  - TTM은 **연속 네 분기**(첫~끝 분기 말 240~300일)일 때만 만든다. 서버 `per_at`도 같고, 아직 끝나지 않은 분기는 뺀다.
+  - **국내(DART)**: 사업보고서는 연간 누적뿐이라 4분기 행이 없어 TTM이 생기지 않던 버그를 고쳤다. 4분기 = 연간 − (1·2·3분기)로 파생(손익 흐름 항목, EPS는 근사). 보유 국내 4종목 고유번호를 채웠다(공개 DART 회사 검색). 일일 크론이 DART 분기 12개 미만인 종목을 한 번에 하나씩 보강하고, 시도한 종목은 3일 건너뛴다.
+  - **미국(SEC EDGAR)**: `companyconcept`(EPS 희석·매출·순이익·영업이익)를 로컬 스크립트로 한 번 넣는다. 4분기는 연간 − 세 분기, 회계일은 가까운 월말로 맞춰 야후 행과 같은 키가 되게 했다. **EPS는 제출일 뒤에 일어난 주식분할만큼 나눠** 오늘(분할 반영 주가) 기준으로 맞춘다(야후 분할 이력). 연락처는 `SEC_USER_AGENT` 환경변수로만(사용자 허락, 코드·저장소에 없음). 해외 20-F 제출사(TSMC·노보)와 ETF는 대상이 아니라 밴드가 짧다.
+  - 가격 이력도 10년으로 늘려 10년 토글이 켜지게 했다(`backfill.mjs --all --range 10y`).
 
 ### 7.2 인증 [확정: 1차]
 - Worker 시크릿 `APP_TOKEN`(긴 무작위 문자열). 모든 API 요청에 `Authorization: Bearer <token>`. 없거나 틀리면 401.

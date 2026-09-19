@@ -32,6 +32,7 @@ npx wrangler d1 execute invest --remote --file .seed/seed.sql
 ```bash
 cd worker
 node scripts/backfill.mjs          # 이력이 부족한 추적 종목만 5년치 (--local, --all, --range 10y)
+SEC_USER_AGENT="이름 이메일" node scripts/sec-history.mjs   # 미국 종목 분기 재무 이력(SEC, 분할 보정). 새 미국 종목을 추가한 뒤 한 번
 ```
 
 크론(UTC `0 7 * * 1-5`, `0 22 * * 1-5`)이 이후 매일 최근 5일 봉과 보유 스냅샷을 채운다. 일요일 `0 23 * * SUN`에는 재무·컨센서스를 최대 8종목씩 갱신한다. 로컬 시험: `npx wrangler dev --test-scheduled` 후 `curl "http://127.0.0.1:8787/__scheduled?cron=0+22+*+*+1-5"`.
