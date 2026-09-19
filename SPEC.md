@@ -561,7 +561,8 @@ CREATE TABLE meta (
 │  ├ src/lib/api.js    fetch 래퍼(토큰 헤더, 에러 처리, 오프라인 캐시)
 │  ├ src/lib/calc/     rsi.js, bands.js, portfolio.js (순수 함수, 단위 테스트 대상)
 │  ├ src/lib/format.js won(), pct(), qtyStr()
-│  ├ src/routes/       home, securities, portfolio, views, more, security/[id]
+│  ├ src/lib/router.svelte.js  해시 라우터 (#/security/12)
+│  ├ src/routes/       home, securities, portfolio, views, more, security (상세)
 │  └ src/components/
 ├ worker/
 │  ├ wrangler.toml     D1 binding, cron triggers, vars
@@ -573,6 +574,13 @@ CREATE TABLE meta (
 │  └ src/calc/         서버에서도 쓰는 계산 (web/src/lib/calc와 공유 가능하면 패키지로)
 └ .github/workflows/pages.yml
 ```
+
+마일스톤 0에서 정한 것 (2026-09-19, 사용자 확인):
+- 저장소 `likelikelikeit/invest-handoff` (공개). Pages 주소 `https://likelikelikeit.github.io/invest-handoff/`, Vite `base`도 같다.
+- 프론트는 SvelteKit이 아닌 **순수 Svelte 5 + Vite + 해시 라우터**. Pages에 서버 폴백이 없어 `#/security/12` 형태로 새로고침 404를 피한다.
+- Worker 이름 `invest-api`(새로 만듦), D1 이름 `invest`. 기존 배포 Worker는 마일스톤 2까지 index.html용으로 남겨두고 이후 삭제.
+- 루트 `package.json`에 npm workspaces(`web`, `worker`)로 lockfile 하나.
+- §3.3·§5.1·§5.5에서 "나중에 추가"라던 `securities.archived_at`, `securities.asset_class`, `position_changes`, `portfolio_scenarios`는 배포 전이라 `0001_init.sql`에 바로 넣었다.
 
 ### 7.2 인증 [확정: 1차]
 - Worker 시크릿 `APP_TOKEN`(긴 무작위 문자열). 모든 API 요청에 `Authorization: Bearer <token>`. 없거나 틀리면 401.

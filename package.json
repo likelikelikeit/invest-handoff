@@ -1,0 +1,13 @@
+{
+  "name": "invest-handoff",
+  "private": true,
+  "workspaces": ["web", "worker"],
+  "scripts": {
+    "dev": "npm run dev -w web",
+    "build": "npm run build -w web",
+    "test": "npm run test -w web",
+    "worker:dev": "npm run dev -w worker",
+    "worker:deploy": "npm run deploy -w worker"
+  },
+  "engines": { "node": ">=20" }
+}

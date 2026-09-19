@@ -1,0 +1,19 @@
+name = "invest-api"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# D1: `npx wrangler d1 create invest` 후 나온 database_id를 아래에 넣는다.
+# database_id는 비밀이 아니다(계정 인증 없이는 접근 불가). 커밋해도 된다.
+[[d1_databases]]
+binding = "DB"
+database_name = "invest"
+database_id = "REPLACE_WITH_D1_ID"
+migrations_dir = "migrations"
+
+[vars]
+# 스킴+호스트만. 로컬 개발용 Vite 주소 포함.
+ALLOW_ORIGINS = "https://likelikelikeit.github.io,http://localhost:5173"
+
+# 크론은 마일스톤 3에서 연결한다 (SPEC §7.3, UTC 고정).
+# [triggers]
+# crons = ["0 7 * * 1-5", "0 22 * * 1-5", "0 23 * * 0", "30 23 * * *", "0 0 * * *"]
