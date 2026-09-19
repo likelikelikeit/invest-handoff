@@ -34,7 +34,7 @@ cd worker
 node scripts/backfill.mjs          # 이력이 부족한 추적 종목만 5년치 (--local, --all, --range 10y)
 ```
 
-크론(UTC `0 7 * * 1-5`, `0 22 * * 1-5`)이 이후 매일 최근 5일 봉과 보유 스냅샷을 채운다. 일요일 `0 23 * * 0`에는 재무·컨센서스를 최대 12종목씩 갱신한다. 로컬 시험: `npx wrangler dev --test-scheduled` 후 `curl "http://127.0.0.1:8787/__scheduled?cron=0+22+*+*+1-5"`.
+크론(UTC `0 7 * * 1-5`, `0 22 * * 1-5`)이 이후 매일 최근 5일 봉과 보유 스냅샷을 채운다. 일요일 `0 23 * * SUN`에는 재무·컨센서스를 최대 12종목씩 갱신한다. 로컬 시험: `npx wrangler dev --test-scheduled` 후 `curl "http://127.0.0.1:8787/__scheduled?cron=0+22+*+*+1-5"`.
 
 ## API (전부 `Authorization: Bearer <APP_TOKEN>`, `/health`만 예외)
 

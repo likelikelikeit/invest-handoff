@@ -6,7 +6,8 @@ import { dartFundamentals } from "../sources/dart.js";
 import { trackedEquities, upsertFinancialsStmt, upsertEstimatesStmt, upsertEarningsStmt } from "../lib/fundamentals.js";
 import { nowIso } from "../lib/time.js";
 
-export const CRON_WEEKLY = "0 23 * * 0";
+// Cloudflare weekday는 1=일요일이라 모호하지 않은 SUN 표기를 쓴다.
+export const CRON_WEEKLY = "0 23 * * SUN";
 const MAX_PER_RUN = 12;
 const DART_PER_RUN = 1; // DART는 종목당 최근 보고서 6회라 한 주에 한 종목만 보강한다.
 

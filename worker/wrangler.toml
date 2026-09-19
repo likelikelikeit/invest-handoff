@@ -21,4 +21,4 @@ IMPORT_LLM_PROVIDER = "anthropic"
 # 크론 (SPEC §7.3, UTC 고정). 문자열은 src/cron/daily.js의 CRON_KR/CRON_US와 같아야 한다.
 # 나머지(거시, 어닝일)는 M7에서 추가한다.
 [triggers]
-crons = ["0 7 * * 1-5", "0 22 * * 1-5", "0 23 * * 0"]
+crons = ["0 7 * * 1-5", "0 22 * * 1-5", "0 23 * * SUN"]
