@@ -18,7 +18,9 @@ export async function handleQuotes(url, env, headers) {
     if (t && !symbols.includes(t) && symbols.length < MAX_SYMBOLS) symbols.push(t);
   }
 
-  const wanted = symbols.concat([FX_SYMBOL]);
+  // 환율은 항상 받는다. 명시적으로 요청했으면(시장 띠) quotes에도 넣는다.
+  const askedFx = symbols.includes(FX_SYMBOL);
+  const wanted = askedFx ? symbols : symbols.concat([FX_SYMBOL]);
   const settled = await Promise.allSettled(wanted.map(quote));
   const quotes = {};
   const errors = [];
@@ -27,8 +29,11 @@ export async function handleQuotes(url, env, headers) {
 
   settled.forEach((r, i) => {
     if (r.status === "fulfilled") {
-      if (wanted[i] === FX_SYMBOL) { fx = r.value.price; fxTime = r.value.time; }
-      else quotes[wanted[i]] = r.value;
+      if (wanted[i] === FX_SYMBOL) {
+        fx = r.value.price;
+        fxTime = r.value.time;
+        if (askedFx) quotes[FX_SYMBOL] = r.value;
+      } else quotes[wanted[i]] = r.value;
     } else {
       errors.push(String(r.reason && r.reason.message ? r.reason.message : r.reason));
     }

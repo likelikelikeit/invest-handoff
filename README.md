@@ -27,6 +27,15 @@ npx wrangler d1 execute invest --remote --file .seed/seed.sql
 
 여러 번 돌려도 같은 결과(upsert). 로컬은 `--remote` 대신 `--local`.
 
+## 시세 백필 (최초 한 번, 또는 종목을 많이 추가한 뒤)
+
+```bash
+cd worker
+node scripts/backfill.mjs          # 이력이 부족한 추적 종목만 5년치 (--local, --all, --range 10y)
+```
+
+크론(UTC `0 7 * * 1-5`, `0 22 * * 1-5`)이 이후 매일 최근 5일 봉과 보유 스냅샷을 채운다. 로컬 시험: `npx wrangler dev --test-scheduled` 후 `curl "http://127.0.0.1:8787/__scheduled?cron=0+22+*+*+1-5"`.
+
 ## API (전부 `Authorization: Bearer <APP_TOKEN>`, `/health`만 예외)
 
 | 경로 | 설명 |
@@ -38,6 +47,9 @@ npx wrangler d1 execute invest --remote --file .seed/seed.sql
 | `GET·POST /portfolio/scenarios`, `DELETE /portfolio/scenarios/:id` | 저장한 시뮬 |
 | `GET·POST /securities`, `GET·PATCH·DELETE /securities/:id` | 종목. DELETE는 숨김(archived_at) |
 | `GET·POST /watchlist`, `DELETE /watchlist/:id` | 관심종목 |
+| `GET /prices/:id?range=1m\|3m\|1y\|3y\|5y\|10y\|max` | 일봉 `[[date,o,h,l,c,v]]` + 전체 이력 first/last/count |
+| `POST /prices/:id/backfill` | 이력이 비었으면 5년, 있으면 최근 5일 |
+| `GET /status` | 크론 마지막 실행 보고 |
 | `GET /cash`, `PUT /cash/KRW\|USD` | 현금 |
 | `GET /quotes?symbols=`, `GET /search?q=`, `POST /import?mt=` | 기존 worker.js 경로 |
 

@@ -1,16 +1,17 @@
 <script>
-  // 종목 상세 — M2 최소판: 헤더(가격·등락), 내 보유, 보유 수정/정리, 분류·브랜드색 편집, 관심.
-  // 차트·밸류에이션·재무·의견 세그먼트는 M3~M5b에서 붙는다 (SPEC §4.3).
+  // 종목 상세: 헤더(가격·등락), 개요(차트·52주·거래량), 내 보유, 보유 수정/정리, 분류·브랜드색 편집.
+  // 밸류에이션·재무·의견 세그먼트는 M4~M5b에서 붙는다 (SPEC §4.3).
   import PageHead from "../components/PageHead.svelte";
   import Gate from "../components/Gate.svelte";
   import Section from "../components/Section.svelte";
   import Logo from "../components/Logo.svelte";
+  import Overview from "../components/Overview.svelte";
   import { data, load, refreshQuotes } from "../lib/data.svelte.js";
   import { api } from "../lib/api.js";
   import { askChanges, toast } from "../lib/ui.svelte.js";
   import { holdingFromPosition } from "../lib/calc/portfolio.js";
   import { assignColors, SECTOR_NAMES } from "../lib/calc/colors.js";
-  import { won, wonSigned, pctSigned, qtyStr, priceStr, tone, parseNum, usd, stamp } from "../lib/format.js";
+  import { won, wonSigned, pctSigned, qtyStr, tone, parseNum, stamp, valueFmt } from "../lib/format.js";
 
   let { id } = $props();
 
@@ -95,20 +96,24 @@
       <Logo h={{ name: sec.name, tick: sec.ticker, mkt: sec.market, isin: sec.isin }} {color} size={48} />
       <div class="t">
         <h1>{sec.name}</h1>
-        <p class="sub">{sec.ticker} · {sec.market === "KR" ? "국내" : "해외"} · {sec.sector || "기타"}</p>
+        <p class="sub">{sec.ticker} · {sec.asset_class === "equity" ? (sec.market === "KR" ? "국내" : "해외") + " · " + (sec.sector || "기타") : sec.asset_class === "fx" ? "환율" : "지수"}</p>
       </div>
     </header>
 
     <div class="price">
       {#if q}
-        <span class="p num">{q.currency === "KRW" ? won(q.price) : usd(q.price)}</span>
+        <span class="p num">{valueFmt(sec)(q.price)}</span>
         {#if day != null}<span class="d num {tone(day * 100)}">{pctSigned(day)}</span>{/if}
-        {#if q.currency !== "KRW" && data.fx}<span class="k num">{won(q.price * data.fx)}</span>{/if}
+        {#if sec.asset_class === "equity" && q.currency !== "KRW" && data.fx}<span class="k num">{won(q.price * data.fx)}</span>{/if}
         <span class="when num">{stamp(q.time)} 기준 · 지연</span>
       {:else}
         <span class="when">시세 데이터 없음</span>
       {/if}
     </div>
+
+    <Section id="sd-overview" title="개요">
+      <Overview {id} fmt={valueFmt(sec)} quote={q} />
+    </Section>
 
     {#if h}
       <Section id="sd-mine" title="내 보유">
@@ -142,7 +147,7 @@
       <p class="hint">야후 심볼 {sec.ysym}</p>
     </Section>
 
-    <p class="later">가격 차트·밸류에이션·재무·내 의견은 다음 마일스톤에서 여기에 붙습니다.</p>
+    <p class="later">밸류에이션·재무·내 의견은 다음 마일스톤에서 여기에 붙습니다.</p>
   {/if}
 </Gate>
 

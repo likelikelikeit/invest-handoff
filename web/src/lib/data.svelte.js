@@ -13,6 +13,7 @@ export const data = $state({
   loading: false,
   error: "",
   quoteErrors: [],
+  market: [], // 시장 띠: 지수·환율 securities
   loaded: false,
 });
 
@@ -28,7 +29,7 @@ export function cash() {
 }
 
 export async function refreshQuotes(extra = []) {
-  const syms = [...new Set(data.positions.map((p) => p.security.ysym).concat(extra))];
+  const syms = [...new Set(data.positions.map((p) => p.security.ysym).concat(data.market.map((s) => s.ysym), extra))];
   if (!syms.length) return;
   try {
     const q = await api("/quotes?symbols=" + encodeURIComponent(syms.join(",")));
@@ -44,15 +45,21 @@ export async function refreshQuotes(extra = []) {
   }
 }
 
+// 시장 띠 순서 (SPEC §4.2 블록 1)
+const MARKET_ORDER = ["^KS11", "^GSPC", "KRW=X", "^TNX"];
+
 export async function load() {
   data.loading = true;
   data.error = "";
   try {
-    const pf = await api("/portfolio");
+    const [pf, secs] = await Promise.all([api("/portfolio"), api("/securities")]);
     data.positions = pf.positions;
     data.cash = pf.cash;
+    data.market = secs.securities
+      .filter((s) => MARKET_ORDER.includes(s.ysym))
+      .sort((a, b) => MARKET_ORDER.indexOf(a.ysym) - MARKET_ORDER.indexOf(b.ysym));
     data.loaded = true;
-    await refreshQuotes();
+    await refreshQuotes(data.market.map((s) => s.ysym));
   } catch (e) {
     data.error = e.message;
   } finally {

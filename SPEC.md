@@ -594,6 +594,18 @@ CREATE TABLE meta (
 - 로컬 개발용 `IMPORT_LLM_PROVIDER=mock`(`.dev.vars`에서만)으로 키 없이 가져오기 흐름을 시험한다.
 - PWA: manifest + iOS 메타 + 최소 서비스 워커(캐시 없음). 오프라인 캐시는 M8.
 - `prompt()` 대신 바텀 시트로 이름을 받는다. 되돌릴 수 없는 동작(시뮬 버리기, 보유 정리)만 `confirm()`.
+
+마일스톤 3에서 정한 것 (2026-09-19):
+- **D1 무료 플랜은 호출 1번에 쿼리 50개이고 `batch()` 안의 문장도 각각 센다.** 그래서 종목 하나의 일봉 전체를 JSON 파라미터 하나로 넘겨 `json_each`로 쿼리 1개에 upsert한다(`worker/src/lib/prices.js`). 보유 스냅샷도 쿼리 1개.
+- 최초 5년 백필은 Worker가 아니라 **로컬 스크립트**(`worker/scripts/backfill.mjs`)로 한 번에 넣는다. 이후 새 종목은 종목 상세를 열 때 `POST /prices/:id/backfill`(그 종목 하나), 크론도 한 번에 2개씩 메운다.
+- 야후는 Node `fetch`(undici)를 429로 거른다. curl과 Worker는 통과. 로컬 스크립트는 curl을 쓴다.
+- 크론이 챙기는 종목 = 보유 + 관심 + 지수·환율(숨김 제외). 최근 5일 봉을 upsert해서 하루 빠져도 메워진다.
+- 스냅샷 날짜 = 크론 실행 시점의 UTC 날짜(07 UTC = 그날 KST 16시, 22 UTC = 익일 KST 07시이므로 전날 미국장). 환율이 없으면 달러 종목은 건너뛴다(0원으로 찍지 않는다).
+- 지수·환율(코스피, S&P500, 원/달러, 미국 10년물)은 `0002`에서 `securities`에 `asset_class` index/fx로 등록. 시장 띠는 실시간(지연) 시세, 누르면 그 지수의 상세 차트.
+- 차트: 선 색은 **기간 수익률 부호**(상승 빨강·하락 파랑). 이력이 기간의 90%를 못 덮으면 그 토글은 끈다(5년치로 10Y를 흉내 내지 않는다). 기억한 기간이 없는 종목은 가능한 가장 긴 기간으로.
+- 터치 스크러빙은 라이브러리 기본(길게 눌러야 켜짐) 대신 가로 드래그를 직접 받아 바로 훑이게 했다.
+- 차트 라이브러리는 상세 화면에서만 늦게 불러온다(첫 화면 번들 46KB gzip 유지). TradingView 로고(라이선스 표기)는 그대로 둔다.
+- 10년 이력은 아직 받지 않는다(마일스톤 표의 "5년 백필"). 필요하면 `node scripts/backfill.mjs --all --range 10y`.
 - §3.3·§5.1·§5.5에서 "나중에 추가"라던 `securities.archived_at`, `securities.asset_class`, `position_changes`, `portfolio_scenarios`는 배포 전이라 `0001_init.sql`에 바로 넣었다.
 
 ### 7.2 인증 [확정: 1차]

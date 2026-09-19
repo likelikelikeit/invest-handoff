@@ -30,6 +30,17 @@ export function usd(n) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/**
+ * 종목 종류에 맞는 값 표기 함수. sec = {ysym, currency, asset_class}
+ *   금리(^TNX) 4.253%  ·  지수 2,650.12  ·  환율 1,385.20원  ·  주식 원/달러
+ */
+export function valueFmt(sec) {
+  if (sec.ysym === "^TNX") return (v) => v.toFixed(3) + "%";
+  if (sec.asset_class === "index") return (v) => v.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (sec.asset_class === "fx") return (v) => v.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "원";
+  return sec.currency === "USD" ? usd : won;
+}
+
 /** 달러 종목은 달러 병기: "$212.34 · 293,338원" */
 export function priceStr(h) {
   if (h.currency === "USD" && h.priceNative != null) return usd(h.priceNative) + " · " + won(h.price);
