@@ -227,10 +227,16 @@ export function parseYahooTimeSeries(data) {
   });
 }
 
+/** 다음 실적 발표일만 (일일 크론용, calendarEvents 모듈 하나라 가볍다). 없으면 null. */
+export async function yahooEarningsDate(env, symbol, now = new Date()) {
+  const data = await yahooAuthed(env, "/v10/finance/quoteSummary/" + encodeURIComponent(symbol) + "?modules=calendarEvents");
+  return parseYahooSummary(data, now.toISOString().slice(0, 10)).earningsDate;
+}
+
 /** 미국 종목의 분기 재무·컨센서스·실적일을 한 번에 가져온다. */
 export async function yahooFundamentals(env, symbol, now = new Date()) {
   const asOf = now.toISOString().slice(0, 10);
-  // M5b의 3년 TTM 밴드를 만들려면 앞의 네 분기가 더 필요하므로 5년을 요청한다.
+  // 5년을 요청하지만 야후는 최근 5개 분기만 준다. 과거 이력은 SEC(scripts/sec-history.mjs)가 채운다.
   const start = Math.floor(Date.UTC(now.getUTCFullYear() - 5, 0, 1) / 1000);
   const end = Math.floor(now.getTime() / 1000) + 86400;
   const [summary, series] = await Promise.all([

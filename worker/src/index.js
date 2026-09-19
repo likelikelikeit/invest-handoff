@@ -17,6 +17,8 @@ import { listViews, latestViews, createView, patchView, deleteView } from "./rou
 import { getFundamentals, refreshFundamentalsRoute } from "./routes/fundamentals.js";
 import { listValuationScenarios, saveValuationScenario, deleteValuationScenario } from "./routes/scenarios.js";
 import { getRules, listRules, saveRules, getTech, createCall, patchCall, listCalls } from "./routes/tech.js";
+import { listEvents, createEvent, deleteEvent, getMacro, saveDots, refreshMacro } from "./routes/calendar.js";
+import { runMisc, CRON_MISC } from "./cron/misc.js";
 
 const ID = "(?<id>\\d+)";
 
@@ -66,6 +68,13 @@ const ROUTES = [
   ["PATCH", "/tech/calls/" + ID, patchCall],
   ["GET", "/tech/" + ID, getTech],
   ["POST", "/tech/" + ID + "/calls", createCall],
+
+  ["GET", "/events", listEvents],
+  ["POST", "/events", createEvent],
+  ["DELETE", "/events/" + ID, deleteEvent],
+  ["GET", "/macro", getMacro],
+  ["POST", "/macro/dots", saveDots],
+  ["POST", "/macro/refresh", refreshMacro],
 
   ["GET", "/prices/" + ID, getPrices],
   ["POST", "/prices/" + ID + "/backfill", backfillPrices],
@@ -128,5 +137,6 @@ export default {
     const which = event.cron === CRON_KR ? "kr" : event.cron === CRON_US ? "us" : null;
     if (which) ctx.waitUntil(runDaily(env, which, new Date(event.scheduledTime)));
     else if (event.cron === CRON_WEEKLY) ctx.waitUntil(runWeekly(env, new Date(event.scheduledTime)));
+    else if (event.cron === CRON_MISC) ctx.waitUntil(runMisc(env, new Date(event.scheduledTime)));
   },
 };

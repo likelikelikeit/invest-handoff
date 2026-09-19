@@ -3,7 +3,7 @@
 import { yahooFundamentals } from "../sources/yahoo.js";
 import { naverFundamentals } from "../sources/naver.js";
 import { dartFundamentals } from "../sources/dart.js";
-import { trackedEquities, upsertFinancialsStmt, upsertEstimatesStmt, upsertEarningsStmt } from "../lib/fundamentals.js";
+import { trackedEquities, upsertFinancialsStmt, upsertEstimatesStmt, replaceEarningsStmts } from "../lib/fundamentals.js";
 import { nowIso } from "../lib/time.js";
 
 // Cloudflare weekday는 1=일요일이라 모호하지 않은 SUN 표기를 쓴다.
@@ -54,7 +54,7 @@ export async function refreshFundamentals(env, secOrId, { withDart = true, now =
   const stmts = [];
   if (financials.length) stmts.push(upsertFinancialsStmt(env, sec.id, financials, at));
   if (estimates.length) stmts.push(upsertEstimatesStmt(env, sec.id, estimates));
-  if (earningsDate) stmts.push(upsertEarningsStmt(env, sec.id, earningsDate, at));
+  if (earningsDate) stmts.push(...replaceEarningsStmts(env, sec.id, earningsDate, at, now.toISOString().slice(0, 10)));
   if (stmts.length) await env.DB.batch(stmts);
   return { security_id: sec.id, financials: financials.length, estimates: estimates.length, earningsDate, errors };
 }

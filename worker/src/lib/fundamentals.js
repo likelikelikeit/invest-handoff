@@ -46,6 +46,19 @@ export function upsertEstimatesStmt(env, securityId, rows) {
   ).bind(securityId, packed);
 }
 
+/**
+ * 다음 실적일 교체: 같은 종목의 오늘 이후 야후 어닝일 중 새 날짜가 아닌 것은 지우고 새 날짜를 넣는다.
+ * (발표일이 바뀌면 옛 날짜가 남지 않게. 지난 일정은 기록으로 둔다.) → 문 2개
+ */
+export function replaceEarningsStmts(env, securityId, date, createdAt, today) {
+  return [
+    env.DB.prepare(
+      "DELETE FROM events WHERE security_id = ?1 AND kind = 'earnings' AND source = 'yahoo' AND date >= ?2 AND date <> ?3"
+    ).bind(securityId, today, date),
+    upsertEarningsStmt(env, securityId, date, createdAt),
+  ];
+}
+
 export function upsertEarningsStmt(env, securityId, date, createdAt) {
   return env.DB.prepare(
     "INSERT INTO events (date, kind, security_id, title, source, detail, created_at) " +
