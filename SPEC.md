@@ -80,7 +80,7 @@
 | Yahoo `/v8/finance/chart/{sym}` | 일별 OHLCV, 현재가, USD/KRW(`KRW=X`), 지수(`^KS11`, `^GSPC`, `^VIX`, `^TNX`) | 없음 | 하루 2회 | 이미 worker.js에 구현. 국내 15~20분 지연 |
 | Yahoo `quoteSummary` (modules: `financialData,earningsTrend,calendarEvents,defaultKeyStatistics`) | 컨센서스 목표가·추천, fwd EPS, 다음 어닝일 | **crumb + 쿠키** (§7.4) | 주 1회 (어닝일은 매일) | 국내 종목은 데이터 얇음 |
 | Yahoo `/v1/finance/search?q=` | 종목 검색 | 없음 | 요청 시 | 이미 worker.js에 구현 |
-| 네이버페이 증권 모바일 내부 JSON | 국내 컨센서스(FnGuide) | 없음 | 주 1회 | 비공식. 엔드포인트는 구현 시 브라우저 개발자도구로 확인 [미정] |
+| 네이버페이 증권 모바일 내부 JSON | 국내 컨센서스(FnGuide), DART 부재 시 재무 폴백 | 없음 | 주 1회 | 비공식. M5a에서 `integration`, `finance/quarter`, `finance/annual` 확인 |
 | DART OpenAPI | 국내 공시, 분기 재무(XBRL) | 무료 API 키 | 주 1회 + 공시 매일 | |
 | FRED | 미국 기준금리, 국채금리(2Y/10Y), CPI 등 | 무료 API 키 | 하루 1회 | |
 | 한국은행 ECOS | 한국 기준금리 | 무료 API 키 | 하루 1회 | |
@@ -121,6 +121,7 @@ CREATE TABLE securities (
   brand_color   TEXT,                     -- '#RRGGBB'. 로고에서 추출하거나 수동
   band_default  TEXT DEFAULT 'per',       -- 'per' | 'pbr' | 'ev_ebitda' | 'psr'
   band_multiples TEXT,                    -- JSON {"per":[8,10,12,14,16],"pbr":[...]} 사용자 수정값
+  dart_corp_code TEXT,                    -- OpenDART 회사 고유번호(8자리). M5a에서 추가
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL
 );
@@ -218,7 +219,7 @@ CREATE TABLE financials (
   net_debt         REAL,
   shares_out       REAL,
   raw              TEXT,                  -- JSON 원문
-  source           TEXT NOT NULL,         -- 'dart' | 'yahoo'
+  source           TEXT NOT NULL,         -- 'dart' | 'yahoo' | 'naver'(DART 키 없을 때 국내 폴백)
   fetched_at       TEXT NOT NULL,
   PRIMARY KEY (security_id, period_end, period_type)
 );
@@ -618,6 +619,13 @@ CREATE TABLE meta (
 - 의견 타임라인: 주가 차트 위에 목표가 계단선 + 현재 목표가 점선. 오늘 기록한 의견은 마지막 일봉에 붙인다.
 - §3.3·§5.1·§5.5에서 "나중에 추가"라던 `securities.archived_at`, `securities.asset_class`, `position_changes`, `portfolio_scenarios`는 배포 전이라 `0001_init.sql`에 바로 넣었다.
 
+마일스톤 5a에서 정한 것 (2026-09-19):
+- 네이버 국내 컨센서스는 모바일 공개 JSON `GET /api/stock/{6자리}/integration`의 `consensusInfo`를 쓴다. 분기·연간 재무 폴백은 `/finance/quarter`, `/finance/annual`이다. 모두 비공식이므로 `worker/src/sources/naver.js`에 격리하고 실패하면 데이터 없음으로 둔다.
+- 국내 재무의 우선 소스는 DART다. `securities.dart_corp_code`(8자리)를 `0003`에서 추가했고, `DART_API_KEY`와 고유번호가 모두 있을 때 최근 공시를 보강한다. 키가 없거나 DART 행이 없는 기간은 네이버 재무를 쓰되, 이미 저장된 DART 행은 네이버가 덮어쓰지 않는다.
+- 미국 컨센서스·다음 실적일은 Yahoo `quoteSummary`, 분기 재무는 `fundamentals-timeseries`를 쓴다. Yahoo 쿠키·crumb은 D1 `meta`에 12시간 캐시하고 401/403이면 한 번 재발급한다.
+- 주간 크론은 보유+관심 equity를 최대 12종목씩 순환한다. DART는 종목당 외부 요청이 많아 한 번에 한 종목만 보강한다. 수동 `POST /fundamentals/:id/refresh`는 해당 종목 하나를 즉시 갱신한다.
+- 재무 UI는 기존 종목 상세의 세로 `Section` 흐름을 유지한다. 분기/연간 표, 항목별 미니 차트, 컨센서스를 넣고 표는 모바일 가로 스크롤·데스크톱 전체 폭으로 표시한다. 금액은 축약하지 않는다.
+
 ### 7.2 인증 [확정: 1차]
 - Worker 시크릿 `APP_TOKEN`(긴 무작위 문자열). 모든 API 요청에 `Authorization: Bearer <token>`. 없거나 틀리면 401.
 - 프론트: 설정 화면에서 토큰 붙여넣기 → localStorage. 기기마다 한 번.
@@ -694,7 +702,7 @@ CREATE TABLE meta (
 |---|---|---|
 | 거래 이력(transactions) | 보류 | 카카오페이 PC 불가. 증권사 이전/API 시 재검토. §5.1 변화 감지가 대체 |
 | Cloudflare Pages + Access | 2차 | 토큰 방식으로 먼저 |
-| 네이버 컨센 엔드포인트 | 미정 | 구현 시 개발자도구로 확인. 비공식 |
+| 네이버 컨센 엔드포인트 | 확정(M5a) | `/api/stock/{code}/integration`의 `consensusInfo`. 비공식이라 어댑터 격리·실패 허용 |
 | 국내 실적발표일 소스 | 없음 | 수동 |
 | 시장 기대 금리 경로 | 대용치 | DGS2 + 점도표 수동 |
 | 시장 대비 초과수익 | 2차 | |
