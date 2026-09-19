@@ -1,11 +1,12 @@
 <script>
-  // 종목 상세: 헤더(가격·등락), 개요(차트·52주·거래량), 내 보유, 보유 수정/정리, 분류·브랜드색 편집.
-  // 내 의견(M4). 밸류에이션·재무 세그먼트는 M5a~M5b에서 붙는다 (SPEC §4.3).
+  // 종목 상세: 헤더, 개요, 재무(M5a), 내 의견, 내 보유, 종목 정보.
+  // 밸류에이션은 M5b에서 붙는다 (SPEC §4.3).
   import PageHead from "../components/PageHead.svelte";
   import Gate from "../components/Gate.svelte";
   import Section from "../components/Section.svelte";
   import Logo from "../components/Logo.svelte";
   import Overview from "../components/Overview.svelte";
+  import Fundamentals from "../components/Fundamentals.svelte";
   import MyViews from "../components/MyViews.svelte";
   import RatingChip from "../components/RatingChip.svelte";
   import { upsideNow } from "../lib/calc/views.js";
@@ -23,6 +24,8 @@
   let qty = $state("");
   let avg = $state("");
   let busy = $state(false);
+  let fundamentals = $state(null);
+  let fundErr = $state("");
 
   const pos = $derived(data.positions.find((p) => p.security_id === id));
   const q = $derived(sec ? data.quotes[sec.ysym] : null);
@@ -47,7 +50,12 @@
       err = e.message;
     }
   }
-  $effect(() => { if (data.loaded && id) fetchSec(); });
+  async function fetchFundamentals() {
+    fundErr = "";
+    try { fundamentals = await api("/fundamentals/" + id); }
+    catch (e) { fundErr = e.message; fundamentals = null; }
+  }
+  $effect(() => { if (data.loaded && id) { fetchSec(); fetchFundamentals(); } });
   $effect(() => {
     if (h) {
       qty = qtyStr(h.qty);
@@ -131,10 +139,15 @@
     {/if}
 
     <Section id="sd-overview" title="개요">
-      <Overview {id} fmt={valueFmt(sec)} quote={q} />
+      <Overview {id} fmt={valueFmt(sec)} quote={q} {fundamentals} {view} />
     </Section>
 
     {#if sec.asset_class === "equity"}
+      <Section id="sd-financials" title="재무" note={fundamentals?.financials?.length ? "분기·연간" : "데이터 없음"}>
+        {#if fundErr}<p class="msg bad">재무 데이터를 불러오지 못했습니다: {fundErr}</p>{/if}
+        <Fundamentals {id} payload={fundamentals} onrefresh={fetchFundamentals} />
+      </Section>
+
       <Section id="sd-views" title="내 의견" note={view ? "최근 " + stamp(view.created_at) : ""}>
         <MyViews {id} fmt={valueFmt(sec)} />
       </Section>
@@ -167,12 +180,16 @@
         <label><span>브랜드색</span>
           <input type="color" value={sec.brand_color || "#0071e3"} onchange={(e) => patch({ brand_color: e.currentTarget.value })} />
         </label>
+        {#if sec.market === "KR"}
+          <label><span>DART 고유번호</span>
+            <input inputmode="numeric" maxlength="8" placeholder="8자리" value={sec.dart_corp_code || ""} onchange={(e) => patch({ dart_corp_code: e.currentTarget.value || null })} />
+          </label>
+        {/if}
         {#if sec.brand_color}<button class="btn sm" onclick={() => patch({ brand_color: null })}>섹터색으로</button>{/if}
       </div>
       <p class="hint">야후 심볼 {sec.ysym}</p>
     </Section>
-
-    <p class="later">밸류에이션·재무는 다음 마일스톤에서 여기에 붙습니다.</p>
+    <p class="later">밸류에이션은 다음 마일스톤에서 붙습니다.</p>
   {/if}
 </Gate>
 

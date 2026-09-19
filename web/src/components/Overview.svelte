@@ -1,13 +1,14 @@
 <script>
   // 종목 상세 · 개요 (SPEC §4.3): 가격 차트(스크러빙, 기간 토글), 52주 범위, 거래량.
-  // 다음 어닝일·컨센 목표가 vs 내 목표가는 M4·M5a에서 여기에 붙는다.
+  // 다음 어닝일·컨센 목표가 vs 내 목표가를 M5a 재무 응답에서 함께 표시한다.
   // 차트 라이브러리(~100KB)는 상세 화면에서만 필요해서 여기서 늦게 불러온다
   const chartModule = import("./PriceChart.svelte");
   import { api } from "../lib/api.js";
   import { range52w, volumeStats } from "../lib/calc/chart.js";
   import { stamp } from "../lib/format.js";
+  import { latestTarget, sourceLabel } from "../lib/calc/fundamentals.js";
 
-  let { id, fmt, quote } = $props();
+  let { id, fmt, quote, fundamentals = null, view = null } = $props();
 
   let rows = $state([]);
   let state = $state("loading"); // loading | backfilling | ok | empty | error
@@ -16,6 +17,7 @@
 
   const r52 = $derived(range52w(rows, quote?.price));
   const vs = $derived(volumeStats(rows));
+  const consensus = $derived(latestTarget(fundamentals?.estimates || [], fundamentals?.security?.market));
 
   async function fetchRows() {
     const r = await api("/prices/" + id + "?range=10y");
@@ -79,6 +81,15 @@
     {#if quote?.time}
       <div><dt>현재가 기준</dt><dd class="num">{stamp(quote.time)} · 지연</dd></div>
     {/if}
+    {#if fundamentals?.next_earnings}
+      <div><dt>다음 실적 발표</dt><dd class="num">{fundamentals.next_earnings.date.replace(/-/g, ".")}</dd></div>
+    {/if}
+    {#if consensus}
+      <div><dt>컨센서스 목표가</dt><dd class="num">{fmt(consensus.target_price)}<em>{sourceLabel(consensus.source)} · {consensus.as_of}</em></dd></div>
+    {/if}
+    {#if view}
+      <div><dt>내 목표가</dt><dd class="num">{fmt(view.target_price)}</dd></div>
+    {/if}
   </dl>
 {/if}
 
@@ -93,5 +104,5 @@
   .bar{position:relative;height:4px;border-radius:99px;background:var(--track);margin:8px 0 6px}
   .bar span{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;background:var(--ink);transform:translate(-50%,-50%)}
   .ends{display:flex;justify-content:space-between;font-size:12.5px;font-weight:500;color:var(--sub)}
-  @media (min-width:900px){ .facts{grid-template-columns:2fr 1fr 1fr} }
+  @media (min-width:900px){ .facts{grid-template-columns:repeat(3,minmax(0,1fr))} .r52{grid-column:span 2} }
 </style>
