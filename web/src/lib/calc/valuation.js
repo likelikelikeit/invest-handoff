@@ -108,6 +108,12 @@ export function bandPrice(row, metric, multiple) {
   return value * m;
 }
 
+/** 성장률에서 계산한 값의 부동소수점 꼬리를 없앤다: 주당 지표는 소수 4자리, EBITDA 총액은 정수. */
+export function roundValue(v, metric) {
+  if (!Number.isFinite(v)) return v;
+  return metric === "ev_ebitda" ? Math.round(v) : Math.round(v * 10000) / 10000;
+}
+
 export function valueFromGrowth(current, growthPct, years = 1) {
   const c = Number(current), g = Number(growthPct), y = Number(years);
   return c > 0 && Number.isFinite(g) && y > 0 ? c * Math.pow(1 + g / 100, y) : null;

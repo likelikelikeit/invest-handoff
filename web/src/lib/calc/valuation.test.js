@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   ttmSeries, consecutiveQuarters, dailyMultiples, quantile, cleanMultiple, suggestedMultiples,
-  valueFromGrowth, growthFromValue, scenarioTarget, bandPrice,
+  valueFromGrowth, growthFromValue, scenarioTarget, bandPrice, roundValue,
 } from "./valuation.js";
 
 // 실제 분기 말 (2024-12-31 ~ 2025-12-31)
@@ -46,5 +46,7 @@ describe("밸류에이션 순수 계산", () => {
     expect(scenarioTarget({ metric: "per", value: 12, multiple: 20 })).toBe(240);
     expect(scenarioTarget({ metric: "ev_ebitda", value: 1000, multiple: 8, net_debt: 2000, shares: 100 })).toBe(60);
     expect(bandPrice({ eps: 12 }, "per", 20)).toBe(240);
+    expect(roundValue(7.91 * 1.2, "per")).toBe(9.492);
+    expect(roundValue(1234567.89, "ev_ebitda")).toBe(1234568);
   });
 });

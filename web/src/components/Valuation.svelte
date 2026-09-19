@@ -5,7 +5,7 @@
   import { valueFmt, pctSigned, tone } from "../lib/format.js";
   import {
     VALUATION_METRICS, ttmSeries, baseValue, dailyMultiples, suggestedMultiples,
-    valueFromGrowth, growthFromValue, scenarioTarget, latestConsensusValue,
+    valueFromGrowth, growthFromValue, scenarioTarget, latestConsensusValue, roundValue,
   } from "../lib/calc/valuation.js";
 
   let { id, sec, payload, quote = null, initialPrices = null, initialScenarios = null } = $props();
@@ -62,7 +62,7 @@
     if (existing) return { ...existing };
     const current = baseValue(latest, metric);
     const growth = name === "bear" ? -10 : name === "bull" ? 25 : 10;
-    const value = name === "base" && consensusValue > 0 ? consensusValue : valueFromGrowth(current, growth, 1) || current || 0;
+    const value = roundValue(name === "base" && consensusValue > 0 ? consensusValue : valueFromGrowth(current, growth, 1) || current || 0, metric);
     const multiple = multiples[name === "bear" ? 1 : name === "bull" ? 3 : 2] || 10;
     return {
       metric, value, multiple,
@@ -83,7 +83,7 @@
   }
   function changeGrowth(v) {
     const growth = Number(v);
-    setDraft(activeScenario, { growth_pct: growth, value: valueFromGrowth(baseValue(latest, metric), growth, currentDraft.horizon_years) });
+    setDraft(activeScenario, { growth_pct: growth, value: roundValue(valueFromGrowth(baseValue(latest, metric), growth, currentDraft.horizon_years), metric) });
   }
   function changeValue(v) {
     const value = Number(v);
@@ -91,7 +91,7 @@
   }
   function changeYears(v) {
     const years = Number(v);
-    setDraft(activeScenario, { horizon_years: years, value: valueFromGrowth(baseValue(latest, metric), currentDraft.growth_pct, years) });
+    setDraft(activeScenario, { horizon_years: years, value: roundValue(valueFromGrowth(baseValue(latest, metric), currentDraft.growth_pct, years), metric) });
   }
   function money(n) {
     if (!Number.isFinite(n)) return "—";
