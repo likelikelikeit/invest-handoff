@@ -45,16 +45,112 @@ export async function getPortfolio(request, env, headers) {
   return json({ ok: true, at: nowIso(), positions, cash: cash.results }, 200, headers);
 }
 
+// ── 변화 감지 (SPEC §5.1) ─────────────────────────────
+// 보유 수량이 바뀌는 모든 쓰기(merge, put, delete)는 position_changes에 행을 남긴다(reason NULL).
+// 앱은 응답의 changes로 "매수/매도/…" 질문을 띄우고 PATCH로 이유를 채운다. 시트를 닫아도 기록은 남는다.
+
+const QTY_EPS = 1e-9;
+
+async function currentQty(env, ids) {
+  if (!ids.length) return new Map();
+  const { results } = await env.DB.prepare(
+    "SELECT security_id, qty FROM positions WHERE security_id IN (" + ids.map((_, i) => "?" + (i + 1)).join(",") + ")"
+  ).bind(...ids).all();
+  return new Map(results.map((r) => [r.security_id, r.qty]));
+}
+
+/** before/after 수량 맵을 비교해 바뀐 것만 기록하고 반환한다. */
+async function recordChanges(env, pairs, at) {
+  const changed = pairs.filter((x) => Math.abs((x.before || 0) - (x.after || 0)) > QTY_EPS);
+  if (!changed.length) return [];
+  const res = await env.DB.batch(changed.map((x) => env.DB.prepare(
+    "INSERT INTO position_changes (security_id, detected_at, qty_before, qty_after) VALUES (?1, ?2, ?3, ?4) RETURNING id"
+  ).bind(x.id, at, x.before || 0, x.after || 0)));
+  return changed.map((x, i) => ({ id: res[i].results[0].id, security_id: x.id, qty_before: x.before || 0, qty_after: x.after || 0 }));
+}
+
+async function withNames(env, changes) {
+  if (!changes.length) return changes;
+  const ids = [...new Set(changes.map((c) => c.security_id))];
+  const { results } = await env.DB.prepare(
+    "SELECT id, name, ticker FROM securities WHERE id IN (" + ids.map((_, i) => "?" + (i + 1)).join(",") + ")"
+  ).bind(...ids).all();
+  const byId = new Map(results.map((r) => [r.id, r]));
+  return changes.map((c) => ({ ...c, name: byId.get(c.security_id)?.name, ticker: byId.get(c.security_id)?.ticker }));
+}
+
 export async function putPosition(request, env, headers, p) {
   const exists = await env.DB.prepare("SELECT 1 FROM securities WHERE id = ?1").bind(p.id).first();
   if (!exists) throw new HttpError(404, "종목 " + p.id + "이(가) 없습니다");
-  await upsertPositionStmt(env, p.id, positionFields(await readJson(request)), nowIso()).run();
-  return json({ ok: true }, 200, headers);
+  const f = positionFields(await readJson(request));
+  const at = nowIso();
+  const before = (await currentQty(env, [p.id])).get(p.id) || 0;
+  await upsertPositionStmt(env, p.id, f, at).run();
+  const changes = await withNames(env, await recordChanges(env, [{ id: p.id, before, after: f.qty }], at));
+  return json({ ok: true, changes }, 200, headers);
 }
 
 export async function deletePosition(request, env, headers, p) {
-  const r = await env.DB.prepare("DELETE FROM positions WHERE security_id = ?1").bind(p.id).run();
-  if (!r.meta.changes) throw new HttpError(404, "보유 중이 아닌 종목입니다");
+  const at = nowIso();
+  const before = (await currentQty(env, [p.id])).get(p.id);
+  if (before == null) throw new HttpError(404, "보유 중이 아닌 종목입니다");
+  await env.DB.prepare("DELETE FROM positions WHERE security_id = ?1").bind(p.id).run();
+  const changes = await withNames(env, await recordChanges(env, [{ id: p.id, before, after: 0 }], at));
+  return json({ ok: true, changes }, 200, headers);
+}
+
+const REASONS = ["buy", "sell", "dividend_reinvest", "split"];
+
+export async function listChanges(request, env, headers, _p, url) {
+  const pending = url.searchParams.get("pending") === "1";
+  const { results } = await env.DB.prepare(
+    "SELECT c.*, s.name, s.ticker FROM position_changes c JOIN securities s ON s.id = c.security_id" +
+    (pending ? " WHERE c.reason IS NULL AND c.skipped = 0" : "") +
+    " ORDER BY c.detected_at DESC, c.id DESC LIMIT 200"
+  ).all();
+  return json({ ok: true, changes: results }, 200, headers);
+}
+
+/** { reason: 'buy'|'sell'|'dividend_reinvest'|'split' } 또는 { skipped: true } */
+export async function patchChange(request, env, headers, p) {
+  const body = await readJson(request);
+  let reason = null;
+  let skipped = 0;
+  if (body.skipped) skipped = 1;
+  else if (REASONS.includes(body.reason)) reason = body.reason;
+  else throw new HttpError(400, "reason은 " + REASONS.join(" | ") + " 중 하나이거나 skipped: true여야 합니다");
+  const r = await env.DB.prepare("UPDATE position_changes SET reason = ?1, skipped = ?2 WHERE id = ?3")
+    .bind(reason, skipped, p.id).run();
+  if (!r.meta.changes) throw new HttpError(404, "변화 기록 " + p.id + "이(가) 없습니다");
+  return json({ ok: true }, 200, headers);
+}
+
+// ── 시뮬 저장 (portfolio_scenarios, SPEC §5.5) ─────────────────
+// 시뮬은 연습장이다. 실제 보유(positions)는 절대 바꾸지 않는다.
+
+export async function listScenarios(request, env, headers) {
+  const { results } = await env.DB.prepare(
+    "SELECT id, name, deposit, created_at, weights FROM portfolio_scenarios ORDER BY created_at DESC"
+  ).all();
+  return json({ ok: true, scenarios: results.map((r) => ({ ...r, weights: JSON.parse(r.weights) })) }, 200, headers);
+}
+
+export async function createScenario(request, env, headers) {
+  const body = await readJson(request);
+  const name = String(body.name || "").trim();
+  if (!name) throw new HttpError(400, "이름이 필요합니다");
+  if (!body.weights || typeof body.weights !== "object") throw new HttpError(400, "weights가 필요합니다");
+  const deposit = Number(body.deposit || 0);
+  if (!Number.isFinite(deposit)) throw new HttpError(400, "deposit은 숫자여야 합니다");
+  const row = await env.DB.prepare(
+    "INSERT INTO portfolio_scenarios (name, weights, deposit, created_at) VALUES (?1, ?2, ?3, ?4) RETURNING id"
+  ).bind(name, JSON.stringify(body.weights), deposit, nowIso()).first();
+  return json({ ok: true, id: row.id }, 200, headers);
+}
+
+export async function deleteScenario(request, env, headers, p) {
+  const r = await env.DB.prepare("DELETE FROM portfolio_scenarios WHERE id = ?1").bind(p.id).run();
+  if (!r.meta.changes) throw new HttpError(404, "시나리오 " + p.id + "이(가) 없습니다");
   return json({ ok: true }, 200, headers);
 }
 
@@ -86,9 +182,14 @@ export async function mergePortfolio(request, env, headers) {
   );
   const secResults = await env.DB.batch(parsed.map((x) => upsertSecurityStmt(env, x.sec, at)));
   const ids = secResults.map((r) => r.results[0].id);
+  let changes = [];
   if (asOwned) {
+    const before = await currentQty(env, ids);
     await env.DB.batch(parsed.map((x, i) => upsertPositionStmt(env, ids[i], x.pos, at)));
+    changes = await withNames(env, await recordChanges(
+      env, parsed.map((x, i) => ({ id: ids[i], before: before.get(ids[i]) || 0, after: x.pos.qty })), at
+    ));
   }
   const added = parsed.filter((x) => !existing.has(x.sec.ysym)).length;
-  return json({ ok: true, added, updated: parsed.length - added, ids }, 200, headers);
+  return json({ ok: true, added, updated: parsed.length - added, ids, changes }, 200, headers);
 }

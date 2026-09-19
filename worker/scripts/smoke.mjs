@@ -51,7 +51,18 @@ r = await call("PATCH", "/securities/" + id, { brand_color: "blue" });
 check("검증 실패 400", r.status === 400, r);
 
 r = await call("PUT", "/portfolio/positions/" + id, { qty: 2.5, avg_price: 100 });
-check("PUT position", r.status === 200, r);
+check("PUT position + 변화 기록(0→2.5)", r.status === 200 && r.data.changes.length === 1 && r.data.changes[0].qty_after === 2.5, r);
+const changeId = r.data.changes[0] && r.data.changes[0].id;
+r = await call("PUT", "/portfolio/positions/" + id, { qty: 2.5, avg_price: 101 });
+check("수량 그대로면 변화 없음", r.data.changes.length === 0, r);
+r = await call("GET", "/portfolio/changes?pending=1");
+check("미응답 변화 목록", r.data.changes.some((c) => c.id === changeId), r);
+r = await call("PATCH", "/portfolio/changes/" + changeId, { reason: "buy" });
+check("변화 이유 기록", r.status === 200, r);
+r = await call("GET", "/portfolio/changes?pending=1");
+check("답한 변화는 미응답에서 빠짐", !r.data.changes.some((c) => c.id === changeId), r);
+r = await call("PATCH", "/portfolio/changes/" + changeId, { reason: "nope" });
+check("잘못된 이유 400", r.status === 400, r);
 r = await call("GET", "/portfolio");
 const pos = r.data.positions.find((p) => p.security_id === id);
 check("position 반영 + avg_ccy 기본값=종목 통화", pos && pos.qty === 2.5 && pos.avg_ccy === "USD", pos);
@@ -61,9 +72,20 @@ check("보유 중 숨김은 409", r.status === 409, r);
 
 r = await call("POST", "/portfolio/merge", { asOwned: true, rows: [{ name: "x", ticker: "SMK", ysym: "SMOKE.TEST", market: "US", currency: "USD", qty: 3, avg_price: 110 }] });
 check("merge: 기존 ysym은 updated", r.status === 200 && r.data.updated === 1 && r.data.added === 0, r);
+check("merge: 변화 2.5→3 기록", r.data.changes.length === 1 && r.data.changes[0].qty_before === 2.5 && r.data.changes[0].name === "스모크", r);
+await call("PATCH", "/portfolio/changes/" + r.data.changes[0].id, { skipped: true });
 
 r = await call("DELETE", "/portfolio/positions/" + id);
-check("DELETE position", r.status === 200, r);
+check("DELETE position + 변화 3→0", r.status === 200 && r.data.changes[0].qty_after === 0, r);
+await call("PATCH", "/portfolio/changes/" + r.data.changes[0].id, { reason: "sell" });
+
+r = await call("POST", "/portfolio/scenarios", { name: "스모크 시뮬", deposit: 1000, weights: { holdings: [{ ysym: "SMOKE.TEST", qty: 1 }] } });
+check("POST /portfolio/scenarios", r.status === 200 && r.data.id, r);
+const scId = r.data.id;
+r = await call("GET", "/portfolio/scenarios");
+check("GET /portfolio/scenarios", r.data.scenarios.some((s) => s.id === scId && s.weights.holdings[0].qty === 1), r);
+r = await call("DELETE", "/portfolio/scenarios/" + scId);
+check("DELETE /portfolio/scenarios/:id", r.status === 200, r);
 
 r = await call("POST", "/watchlist", { security_id: id, note: "테스트" });
 check("POST /watchlist", r.status === 200 && r.data.id, r);

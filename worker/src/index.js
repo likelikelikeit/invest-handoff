@@ -6,7 +6,10 @@ import {
   listSecurities, getSecurityRoute, createSecurity, patchSecurity, archiveSecurity,
   listWatchlist, addWatch, removeWatch, listCash, putCash,
 } from "./routes/securities.js";
-import { getPortfolio, putPosition, deletePosition, mergePortfolio } from "./routes/portfolio.js";
+import {
+  getPortfolio, putPosition, deletePosition, mergePortfolio,
+  listChanges, patchChange, listScenarios, createScenario, deleteScenario,
+} from "./routes/portfolio.js";
 
 const ID = "(?<id>\\d+)";
 
@@ -20,6 +23,11 @@ const ROUTES = [
   ["POST", "/portfolio/merge", mergePortfolio],
   ["PUT", "/portfolio/positions/" + ID, putPosition],
   ["DELETE", "/portfolio/positions/" + ID, deletePosition],
+  ["GET", "/portfolio/changes", listChanges],
+  ["PATCH", "/portfolio/changes/" + ID, patchChange],
+  ["GET", "/portfolio/scenarios", listScenarios],
+  ["POST", "/portfolio/scenarios", createScenario],
+  ["DELETE", "/portfolio/scenarios/" + ID, deleteScenario],
 
   ["GET", "/securities", listSecurities],
   ["POST", "/securities", createSecurity],
