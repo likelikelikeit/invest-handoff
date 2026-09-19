@@ -8,8 +8,9 @@ import { nowIso } from "../lib/time.js";
 
 // Cloudflare weekday는 1=일요일이라 모호하지 않은 SUN 표기를 쓴다.
 export const CRON_WEEKLY = "0 23 * * SUN";
-const MAX_PER_RUN = 12;
-const DART_PER_RUN = 1; // DART는 종목당 최근 보고서 6회라 한 주에 한 종목만 보강한다.
+// DART 16회 + 국내 폴백 3회씩을 합쳐도 외부 요청 40개 이하가 되도록 8종목으로 제한한다.
+const MAX_PER_RUN = 8;
+const DART_PER_RUN = 1;
 
 async function getSecurity(env, id) {
   return env.DB.prepare(
@@ -58,7 +59,7 @@ export async function refreshFundamentals(env, secOrId, { withDart = true, now =
   return { security_id: sec.id, financials: financials.length, estimates: estimates.length, earningsDate, errors };
 }
 
-/** 무료 플랜 쿼리·서브요청 한도를 위해 12종목씩 순환한다. */
+/** 무료 플랜 쿼리·서브요청 한도를 위해 8종목씩 순환한다. */
 export async function runWeekly(env, now = new Date()) {
   const all = await trackedEquities(env);
   const cursorRow = await env.DB.prepare("SELECT value FROM meta WHERE key = 'cron:weekly:cursor'").first();

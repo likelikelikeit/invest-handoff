@@ -230,7 +230,8 @@ export function parseYahooTimeSeries(data) {
 /** 미국 종목의 분기 재무·컨센서스·실적일을 한 번에 가져온다. */
 export async function yahooFundamentals(env, symbol, now = new Date()) {
   const asOf = now.toISOString().slice(0, 10);
-  const start = Math.floor(Date.UTC(now.getUTCFullYear() - 3, 0, 1) / 1000);
+  // M5b의 3년 TTM 밴드를 만들려면 앞의 네 분기가 더 필요하므로 5년을 요청한다.
+  const start = Math.floor(Date.UTC(now.getUTCFullYear() - 5, 0, 1) / 1000);
   const end = Math.floor(now.getTime() / 1000) + 86400;
   const [summary, series] = await Promise.all([
     yahooAuthed(env, "/v10/finance/quoteSummary/" + encodeURIComponent(symbol) + "?modules=" + SUMMARY_MODULES),

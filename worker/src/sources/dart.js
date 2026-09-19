@@ -48,11 +48,11 @@ export function parseDartStatement(data, year, report) {
   };
 }
 
-export function recentDartReports(now = new Date(), count = 6) {
+export function recentDartReports(now = new Date(), count = 16) {
   const today = now.toISOString().slice(0, 10);
   const out = [];
   const y = now.getUTCFullYear();
-  for (let year = y; year >= y - 2; year--) {
+  for (let year = y; year >= y - 4; year--) {
     for (const report of REPORTS) {
       const end = year + "-" + String(report.month).padStart(2, "0") + "-" + String(report.day).padStart(2, "0");
       if (end <= today) out.push({ year, ...report, end });
@@ -73,7 +73,7 @@ async function statement(apiKey, corpCode, report) {
   return parseDartStatement(await res.json(), report.year, report);
 }
 
-/** 최근 공시 6개를 받는다. 없는 분기는 건너뛴다. */
+/** TTM 3년 밴드를 만들 수 있도록 최근 공시 16개를 받는다. 없는 분기는 건너뛴다. */
 export async function dartFundamentals(apiKey, corpCode, now = new Date()) {
   if (!apiKey) throw new Error("DART_API_KEY가 없습니다");
   if (!/^\d{8}$/.test(String(corpCode || ""))) throw new Error("DART 회사 고유번호가 없습니다");

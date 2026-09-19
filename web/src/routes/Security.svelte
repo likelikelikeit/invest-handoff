@@ -1,12 +1,12 @@
 <script>
-  // 종목 상세: 헤더, 개요, 재무(M5a), 내 의견, 내 보유, 종목 정보.
-  // 밸류에이션은 M5b에서 붙는다 (SPEC §4.3).
+  // 종목 상세: 헤더, 개요, 재무, 밸류에이션, 내 의견, 내 보유, 종목 정보.
   import PageHead from "../components/PageHead.svelte";
   import Gate from "../components/Gate.svelte";
   import Section from "../components/Section.svelte";
   import Logo from "../components/Logo.svelte";
   import Overview from "../components/Overview.svelte";
   import Fundamentals from "../components/Fundamentals.svelte";
+  import Valuation from "../components/Valuation.svelte";
   import MyViews from "../components/MyViews.svelte";
   import RatingChip from "../components/RatingChip.svelte";
   import { upsideNow } from "../lib/calc/views.js";
@@ -148,6 +148,10 @@
         <Fundamentals {id} payload={fundamentals} onrefresh={fetchFundamentals} />
       </Section>
 
+      <Section id="sd-valuation" title="밸류에이션" note={sec.band_default?.toUpperCase() || "PER"}>
+        <Valuation {id} {sec} payload={fundamentals} quote={q} />
+      </Section>
+
       <Section id="sd-views" title="내 의견" note={view ? "최근 " + stamp(view.created_at) : ""}>
         <MyViews {id} fmt={valueFmt(sec)} />
       </Section>
@@ -189,7 +193,6 @@
       </div>
       <p class="hint">야후 심볼 {sec.ysym}</p>
     </Section>
-    <p class="later">밸류에이션은 다음 마일스톤에서 붙습니다.</p>
   {/if}
 </Gate>
 
@@ -217,6 +220,5 @@
   .edit input:focus,.edit select:focus{outline:none;border-color:var(--accent)}
   .link{margin-top:12px;color:var(--red)}
   .hint{font-size:12.5px;color:var(--sub2);margin-top:10px}
-  .later{font-size:13px;color:var(--sub2);padding:24px 0;border-top:1px solid var(--line-soft)}
   @media (min-width:900px){ .mine{grid-template-columns:repeat(4,1fr)} }
 </style>

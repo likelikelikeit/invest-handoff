@@ -6,6 +6,7 @@ import { json, HttpError, readJson } from "../lib/http.js";
 import { nowIso } from "../lib/time.js";
 import { quote } from "../sources/yahoo.js";
 import { RATINGS, scoreOf } from "../lib/ratings.js";
+import { perAt } from "../lib/valuation.js";
 
 const EDITABLE = ["rating", "target_price", "horizon_months", "thesis", "risks", "valuation"];
 
@@ -106,14 +107,15 @@ export async function createView(request, env, headers) {
   const f = fields(body, false);
   const px = await priceNow(env, sec);
   const cons = await consensusNow(env, sid);
+  const per = await perAt(env, sid, px.price);
   const row = await env.DB.prepare(
     "INSERT INTO views (security_id, created_at, rating, rating_score, target_price, target_ccy, horizon_months, thesis, risks, valuation, " +
     "price_at, price_at_source, upside_pct, consensus_target_at, per_at) " +
-    "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL) RETURNING id"
+    "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15) RETURNING id"
   ).bind(
     sid, nowIso(), f.rating, f.rating_score, f.target_price, sec.currency, f.horizon_months,
     f.thesis ?? null, f.risks ?? null, f.valuation ?? null,
-    px.price, px.source, f.target_price / px.price - 1, cons
+    px.price, px.source, f.target_price / px.price - 1, cons, per
   ).first();
   const v = await env.DB.prepare(SELECT + "WHERE v.id = ?1").bind(row.id).first();
   return json({ ok: true, view: out(v) }, 200, headers);

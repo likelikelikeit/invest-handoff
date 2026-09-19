@@ -15,6 +15,7 @@ import { runDaily, CRON_KR, CRON_US } from "./cron/daily.js";
 import { runWeekly, CRON_WEEKLY } from "./cron/weekly.js";
 import { listViews, latestViews, createView, patchView, deleteView } from "./routes/views.js";
 import { getFundamentals, refreshFundamentalsRoute } from "./routes/fundamentals.js";
+import { listValuationScenarios, saveValuationScenario, deleteValuationScenario } from "./routes/scenarios.js";
 
 const ID = "(?<id>\\d+)";
 
@@ -52,6 +53,10 @@ const ROUTES = [
 
   ["GET", "/fundamentals/" + ID, getFundamentals],
   ["POST", "/fundamentals/" + ID + "/refresh", refreshFundamentalsRoute],
+
+  ["GET", "/scenarios", listValuationScenarios],
+  ["POST", "/scenarios", saveValuationScenario],
+  ["DELETE", "/scenarios/" + ID, deleteValuationScenario],
 
   ["GET", "/prices/" + ID, getPrices],
   ["POST", "/prices/" + ID + "/backfill", backfillPrices],

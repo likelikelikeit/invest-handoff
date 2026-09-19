@@ -12,7 +12,7 @@ migrations_dir = "migrations"
 
 [vars]
 # 스킴+호스트만. 로컬 개발용 Vite 주소 포함.
-ALLOW_ORIGINS = "https://likelikelikeit.github.io,http://localhost:5173"
+ALLOW_ORIGINS = "https://likelikelikeit.github.io,http://localhost:5173,http://127.0.0.1:5173"
 # 스크린샷 인식 LLM (SPEC §10 미정). 공급자는 src/sources/llm.js의 PROVIDERS 키.
 # 키 시크릿이 없으면 /import만 501, 나머지는 정상.
 IMPORT_LLM_PROVIDER = "anthropic"

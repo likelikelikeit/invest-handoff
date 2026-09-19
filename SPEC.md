@@ -626,6 +626,13 @@ CREATE TABLE meta (
 - 주간 크론은 보유+관심 equity를 최대 12종목씩 순환한다. DART는 종목당 외부 요청이 많아 한 번에 한 종목만 보강한다. 수동 `POST /fundamentals/:id/refresh`는 해당 종목 하나를 즉시 갱신한다.
 - 재무 UI는 기존 종목 상세의 세로 `Section` 흐름을 유지한다. 분기/연간 표, 항목별 미니 차트, 컨센서스를 넣고 표는 모바일 가로 스크롤·데스크톱 전체 폭으로 표시한다. 금액은 축약하지 않는다.
 
+마일스톤 5b에서 정한 것 (2026-09-19):
+- TTM·멀티플·분위수·시나리오 목표가는 `web/src/lib/calc/valuation.js`의 순수 함수가 계산한다. 차트는 기존 가격 차트와 같은 Lightweight Charts를 늦게 불러오며, 모바일에서는 가로 드래그 즉시 스크러빙한다.
+- `securities.band_multiples`는 지표별 5개 배수 배열 객체(`{per:[...], pbr:[...]}`)로 저장한다. 자동 추천은 선택 지표의 일별 멀티플 10·25·50·75·90 분위수를 §5.3 규칙으로 반올림한다.
+- 시나리오 `assumptions`는 `metric`, `value`, `multiple`, `growth_pct`, `horizon_years`와 EV/EBITDA용 `net_debt`, `shares`를 저장한다. 같은 종목의 bear/base/bull은 현재 작업 가정이므로 이름별 upsert한다. base에서 의견을 열 때 목표가와 valuation JSON을 넘기며, 의견 행은 기존 사건 방식대로 새로 쓴다.
+- 의견 기록 시 `per_at`은 서버가 저장된 최근 네 분기 EPS와 기록 순간 가격으로 계산해 얼린다. 네 분기가 온전히 없거나 TTM EPS가 양수가 아니면 null이다.
+- 3년 TTM 밴드의 선행 네 분기를 확보하기 위해 Yahoo 재무 요청은 5년, DART는 최근 16개 보고서로 넓힌다. DART 16회와 국내 폴백을 포함해 외부 요청 40개 이하가 되도록 주간 크론은 최대 8종목씩 순환한다.
+
 ### 7.2 인증 [확정: 1차]
 - Worker 시크릿 `APP_TOKEN`(긴 무작위 문자열). 모든 API 요청에 `Authorization: Bearer <token>`. 없거나 틀리면 401.
 - 프론트: 설정 화면에서 토큰 붙여넣기 → localStorage. 기기마다 한 번.
