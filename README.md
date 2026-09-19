@@ -35,7 +35,7 @@ node scripts/backfill.mjs          # 이력이 부족한 추적 종목만 5년�
 SEC_USER_AGENT="이름 이메일" node scripts/sec-history.mjs   # 미국 종목 분기 재무 이력(SEC, 분할 보정). 새 미국 종목을 추가한 뒤 한 번
 ```
 
-크론(UTC `0 7 * * 1-5`, `0 22 * * 1-5`)이 이후 매일 최근 5일 봉과 보유 스냅샷을 채운다. 일요일 `0 23 * * SUN`에는 재무·컨센서스를 최대 8종목씩 갱신한다. 로컬 시험: `npx wrangler dev --test-scheduled` 후 `curl "http://127.0.0.1:8787/__scheduled?cron=0+22+*+*+1-5"`.
+크론(UTC `0 7 * * 1-5`, `0 22 * * 1-5`)이 이후 매일 최근 5일 봉과 보유 스냅샷을 채운다. 일요일 `0 23 * * SUN`에는 재무·컨센서스를 최대 8종목씩, 매일 `30 23 * * *`에는 거시(FRED·ECOS)와 미국 다음 실적일을 갱신한다(`FRED_API_KEY`, `ECOS_API_KEY` 시크릿 필요). 로컬 시험: `npx wrangler dev --test-scheduled` 후 `curl "http://127.0.0.1:8787/__scheduled?cron=0+22+*+*+1-5"`.
 
 ## API (전부 `Authorization: Bearer <APP_TOKEN>`, `/health`만 예외)
 
@@ -58,6 +58,8 @@ SEC_USER_AGENT="이름 이메일" node scripts/sec-history.mjs   # 미국 종목
 | `GET /tech/:id?side=buy|sell` | 판정 계기판(5지표·라벨·참고, 지연 현재가 포함) |
 | `POST /tech/:id/calls`, `PATCH /tech/calls/:id`, `GET /tech/calls?security_id=` | 판정 기록·행동·목록 (1주·1개월 뒤 가격은 크론) |
 | `GET·POST /tech/rules`, `GET /tech/rules/history` | 판정 규칙(저장 = 새 버전) |
+| `GET /events?from=&to=`, `POST /events`, `DELETE /events/:id` | 일정 조회·직접 추가·삭제(직접 넣은 것만) |
+| `GET /macro?from=`, `POST /macro/dots`, `POST /macro/refresh?backfill=1` | 거시 시계열·점도표 입력·즉시 갱신 |
 | `GET /status` | 크론 마지막 실행 보고 |
 | `GET /cash`, `PUT /cash/KRW\|USD` | 현금 |
 | `GET /quotes?symbols=`, `GET /search?q=`, `POST /import?mt=` | 기존 worker.js 경로 |

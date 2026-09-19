@@ -58,7 +58,7 @@
       handleScale: false,
       grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.24 } },
-      timeScale: { borderVisible: false, fixLeftEdge: true, fixRightEdge: true },
+      timeScale: { borderVisible: false, fixLeftEdge: true, fixRightEdge: true, lockVisibleTimeRangeOnResize: true },
       crosshair: {
         mode: CrosshairMode.Magnet,
         vertLine: { width: 1, style: LineStyle.Solid, labelVisible: false },

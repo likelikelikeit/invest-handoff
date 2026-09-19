@@ -15,38 +15,38 @@ INSERT INTO macro_series (series_id, name, unit, source, fetch_key) VALUES
 ON CONFLICT(series_id) DO NOTHING;
 
 -- 같은 (종류, 날짜, 제목)이 있으면 넣지 않는다 (종목 없는 일정은 security_id가 NULL이라 유니크 인덱스가 막지 못한다)
+-- D1은 복합 SELECT(UNION ALL) 항 수 제한이 낮아 json_each로 넣는다. [날짜, 시각(KST), 제목, detail JSON]
 INSERT INTO events (date, time, kind, security_id, title, source, detail, created_at)
-SELECT v.date, v.time, 'macro', NULL, v.title, 'manual', v.detail, '2026-09-19T00:00:00+09:00'
-FROM (
-  SELECT '2026-01-29' AS date, '04:00' AS time, 'FOMC 금리 결정' AS title, '{"local":"2026-01-28 14:00 ET"}' AS detail
-  UNION ALL SELECT '2026-03-19', '03:00', 'FOMC 금리 결정 · 점도표', '{"local":"2026-03-18 14:00 ET","sep":true}'
-  UNION ALL SELECT '2026-04-30', '03:00', 'FOMC 금리 결정', '{"local":"2026-04-29 14:00 ET"}'
-  UNION ALL SELECT '2026-06-18', '03:00', 'FOMC 금리 결정 · 점도표', '{"local":"2026-06-17 14:00 ET","sep":true}'
-  UNION ALL SELECT '2026-07-30', '03:00', 'FOMC 금리 결정', '{"local":"2026-07-29 14:00 ET"}'
-  UNION ALL SELECT '2026-09-17', '03:00', 'FOMC 금리 결정 · 점도표', '{"local":"2026-09-16 14:00 ET","sep":true}'
-  UNION ALL SELECT '2026-10-29', '03:00', 'FOMC 금리 결정', '{"local":"2026-10-28 14:00 ET"}'
-  UNION ALL SELECT '2026-12-10', '04:00', 'FOMC 금리 결정 · 점도표', '{"local":"2026-12-09 14:00 ET","sep":true}'
-  UNION ALL SELECT '2027-01-28', '04:00', 'FOMC 금리 결정', '{"local":"2027-01-27 14:00 ET"}'
-  UNION ALL SELECT '2027-03-18', '03:00', 'FOMC 금리 결정 · 점도표', '{"local":"2027-03-17 14:00 ET","sep":true}'
-  UNION ALL SELECT '2027-04-29', '03:00', 'FOMC 금리 결정', '{"local":"2027-04-28 14:00 ET"}'
-  UNION ALL SELECT '2027-06-10', '03:00', 'FOMC 금리 결정 · 점도표', '{"local":"2027-06-09 14:00 ET","sep":true}'
-  UNION ALL SELECT '2027-07-29', '03:00', 'FOMC 금리 결정', '{"local":"2027-07-28 14:00 ET"}'
-  UNION ALL SELECT '2027-09-16', '03:00', 'FOMC 금리 결정 · 점도표', '{"local":"2027-09-15 14:00 ET","sep":true}'
-  UNION ALL SELECT '2027-10-28', '03:00', 'FOMC 금리 결정', '{"local":"2027-10-27 14:00 ET"}'
-  UNION ALL SELECT '2027-12-09', '04:00', 'FOMC 금리 결정 · 점도표', '{"local":"2027-12-08 14:00 ET","sep":true}'
-  UNION ALL SELECT '2026-01-15', '10:00', '금통위 기준금리 결정', NULL
-  UNION ALL SELECT '2026-02-26', '10:00', '금통위 기준금리 결정', NULL
-  UNION ALL SELECT '2026-04-10', '10:00', '금통위 기준금리 결정', NULL
-  UNION ALL SELECT '2026-05-28', '10:00', '금통위 기준금리 결정', NULL
-  UNION ALL SELECT '2026-07-16', '10:00', '금통위 기준금리 결정', NULL
-  UNION ALL SELECT '2026-08-27', '10:00', '금통위 기준금리 결정', NULL
-  UNION ALL SELECT '2026-10-22', '10:00', '금통위 기준금리 결정', NULL
-  UNION ALL SELECT '2026-11-26', '10:00', '금통위 기준금리 결정', NULL
-  UNION ALL SELECT '2026-10-14', '21:30', '미국 CPI (9월)', '{"local":"2026-10-14 08:30 ET"}'
-  UNION ALL SELECT '2026-11-10', '22:30', '미국 CPI (10월)', '{"local":"2026-11-10 08:30 ET"}'
-  UNION ALL SELECT '2026-12-10', '22:30', '미국 CPI (11월)', '{"local":"2026-12-10 08:30 ET"}'
-  UNION ALL SELECT '2026-10-02', '21:30', '미국 고용보고서 (9월)', '{"local":"2026-10-02 08:30 ET"}'
-  UNION ALL SELECT '2026-11-06', '22:30', '미국 고용보고서 (10월)', '{"local":"2026-11-06 08:30 ET"}'
-  UNION ALL SELECT '2026-12-04', '22:30', '미국 고용보고서 (11월)', '{"local":"2026-12-04 08:30 ET"}'
-) v
-WHERE NOT EXISTS (SELECT 1 FROM events e WHERE e.kind = 'macro' AND e.date = v.date AND e.title = v.title);
+SELECT json_extract(value,'$[0]'), json_extract(value,'$[1]'), 'macro', NULL, json_extract(value,'$[2]'), 'manual',
+       json_extract(value,'$[3]'), '2026-09-19T00:00:00+09:00'
+FROM json_each('[["2026-01-29","04:00","FOMC 금리 결정","{\"local\":\"2026-01-28 14:00 ET\"}"],
+  ["2026-03-19","03:00","FOMC 금리 결정 · 점도표","{\"local\":\"2026-03-18 14:00 ET\",\"sep\":true}"],
+  ["2026-04-30","03:00","FOMC 금리 결정","{\"local\":\"2026-04-29 14:00 ET\"}"],
+  ["2026-06-18","03:00","FOMC 금리 결정 · 점도표","{\"local\":\"2026-06-17 14:00 ET\",\"sep\":true}"],
+  ["2026-07-30","03:00","FOMC 금리 결정","{\"local\":\"2026-07-29 14:00 ET\"}"],
+  ["2026-09-17","03:00","FOMC 금리 결정 · 점도표","{\"local\":\"2026-09-16 14:00 ET\",\"sep\":true}"],
+  ["2026-10-29","03:00","FOMC 금리 결정","{\"local\":\"2026-10-28 14:00 ET\"}"],
+  ["2026-12-10","04:00","FOMC 금리 결정 · 점도표","{\"local\":\"2026-12-09 14:00 ET\",\"sep\":true}"],
+  ["2027-01-28","04:00","FOMC 금리 결정","{\"local\":\"2027-01-27 14:00 ET\"}"],
+  ["2027-03-18","03:00","FOMC 금리 결정 · 점도표","{\"local\":\"2027-03-17 14:00 ET\",\"sep\":true}"],
+  ["2027-04-29","03:00","FOMC 금리 결정","{\"local\":\"2027-04-28 14:00 ET\"}"],
+  ["2027-06-10","03:00","FOMC 금리 결정 · 점도표","{\"local\":\"2027-06-09 14:00 ET\",\"sep\":true}"],
+  ["2027-07-29","03:00","FOMC 금리 결정","{\"local\":\"2027-07-28 14:00 ET\"}"],
+  ["2027-09-16","03:00","FOMC 금리 결정 · 점도표","{\"local\":\"2027-09-15 14:00 ET\",\"sep\":true}"],
+  ["2027-10-28","03:00","FOMC 금리 결정","{\"local\":\"2027-10-27 14:00 ET\"}"],
+  ["2027-12-09","04:00","FOMC 금리 결정 · 점도표","{\"local\":\"2027-12-08 14:00 ET\",\"sep\":true}"],
+  ["2026-01-15","10:00","금통위 기준금리 결정",null],
+  ["2026-02-26","10:00","금통위 기준금리 결정",null],
+  ["2026-04-10","10:00","금통위 기준금리 결정",null],
+  ["2026-05-28","10:00","금통위 기준금리 결정",null],
+  ["2026-07-16","10:00","금통위 기준금리 결정",null],
+  ["2026-08-27","10:00","금통위 기준금리 결정",null],
+  ["2026-10-22","10:00","금통위 기준금리 결정",null],
+  ["2026-11-26","10:00","금통위 기준금리 결정",null],
+  ["2026-10-14","21:30","미국 CPI (9월)","{\"local\":\"2026-10-14 08:30 ET\"}"],
+  ["2026-11-10","22:30","미국 CPI (10월)","{\"local\":\"2026-11-10 08:30 ET\"}"],
+  ["2026-12-10","22:30","미국 CPI (11월)","{\"local\":\"2026-12-10 08:30 ET\"}"],
+  ["2026-10-02","21:30","미국 고용보고서 (9월)","{\"local\":\"2026-10-02 08:30 ET\"}"],
+  ["2026-11-06","22:30","미국 고용보고서 (10월)","{\"local\":\"2026-11-06 08:30 ET\"}"],
+  ["2026-12-04","22:30","미국 고용보고서 (11월)","{\"local\":\"2026-12-04 08:30 ET\"}"]]') v
+WHERE NOT EXISTS (SELECT 1 FROM events e WHERE e.kind = 'macro' AND e.date = json_extract(v.value,'$[0]') AND e.title = json_extract(v.value,'$[2]'));
