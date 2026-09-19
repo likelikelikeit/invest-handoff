@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- 앱 아이콘: 자산 도넛. 원본 SVG, PNG는 scripts/icons.mjs로 만든다. -->
+  <!-- 앱 아이콘: 자산 도넛. PNG(180·192·512)는 이 파일을 sharp로 래스터화해 만들었다. 바꾸면 PNG도 다시 뽑는다. -->
   <rect width="512" height="512" fill="#ffffff"/>
   <g transform="rotate(-90 256 256)" fill="none" stroke-width="72">
     <circle cx="256" cy="256" r="150" stroke="#eef0f3"/>
