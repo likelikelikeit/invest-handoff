@@ -12,6 +12,7 @@ import {
 } from "./routes/portfolio.js";
 import { getPrices, backfillPrices, getStatus } from "./routes/prices.js";
 import { runDaily, CRON_KR, CRON_US } from "./cron/daily.js";
+import { listViews, latestViews, createView, patchView, deleteView } from "./routes/views.js";
 
 const ID = "(?<id>\\d+)";
 
@@ -40,6 +41,12 @@ const ROUTES = [
   ["GET", "/watchlist", listWatchlist],
   ["POST", "/watchlist", addWatch],
   ["DELETE", "/watchlist/" + ID, removeWatch],
+
+  ["GET", "/views", listViews],
+  ["GET", "/views/latest", latestViews],
+  ["POST", "/views", createView],
+  ["PATCH", "/views/" + ID, patchView],
+  ["DELETE", "/views/" + ID, deleteView],
 
   ["GET", "/prices/" + ID, getPrices],
   ["POST", "/prices/" + ID + "/backfill", backfillPrices],

@@ -1,0 +1,84 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { makeDb } from "./d1shim.js";
+
+// 야후 시세는 가짜로. 실패 모드도 켤 수 있게.
+const yahoo = { fail: false, price: 200 };
+vi.mock("../src/sources/yahoo.js", () => ({
+  quote: async () => {
+    if (yahoo.fail) throw new Error("야후 다운");
+    return { price: yahoo.price, time: "2026-09-18T20:00:00.000Z" };
+  },
+}));
+
+const { createView, patchView, deleteView, latestViews, listViews } = await import("../src/routes/views.js");
+
+const H = {};
+const req = (body) => ({ json: async () => body });
+const url = (q = "") => new URL("http://x/views" + q);
+const body = async (res) => ({ status: res.status, ...(await res.json()) });
+
+describe("views (실제 SQLite)", () => {
+  let env;
+  beforeEach(() => {
+    yahoo.fail = false;
+    yahoo.price = 200;
+    env = { DB: makeDb() };
+    const at = "2026-09-19T00:00:00+09:00";
+    env.DB.raw.prepare("INSERT INTO securities (name, ticker, ysym, market, currency, created_at, updated_at) VALUES (?,?,?,?,?,?,?)")
+      .run("엔비디아", "NVDA", "NVDA", "US", "USD", at, at); // id 5
+  });
+
+  it("기록: 서버가 가격·상승여력·통화·점수를 얼린다", async () => {
+    const r = await body(await createView(req({ security_id: 5, rating: "매수", target_price: 260, thesis: "  AI 수요\n데이터센터 " }), env, H));
+    expect(r.view).toMatchObject({
+      rating: "매수", rating_score: 3, target_price: 260, target_ccy: "USD", horizon_months: 12,
+      price_at: 200, thesis: "AI 수요\n데이터센터", consensus_target_at: null, edited_at: null, name: "엔비디아",
+    });
+    expect(r.view.upside_pct).toBeCloseTo(0.3);
+    expect(r.view.price_at_source).toMatch(/^yahoo\(delayed\)/);
+    expect(r.view.created_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\+09:00$/);
+  });
+
+  it("야후가 죽으면 마지막 종가로, 그것도 없으면 503", async () => {
+    yahoo.fail = true;
+    await expect(createView(req({ security_id: 5, rating: "매수", target_price: 260 }), env, H)).rejects.toMatchObject({ status: 503 });
+    env.DB.raw.exec("INSERT INTO prices (security_id, date, close) VALUES (5, '2026-09-18', 190)");
+    const r = await body(await createView(req({ security_id: 5, rating: "매수", target_price: 228 }), env, H));
+    expect(r.view.price_at).toBe(190);
+    expect(r.view.price_at_source).toBe("close 2026-09-18");
+  });
+
+  it("검증: 등급·목표가·기간", async () => {
+    await expect(createView(req({ security_id: 5, rating: "강력 매수", target_price: 1 }), env, H)).rejects.toMatchObject({ status: 400 });
+    await expect(createView(req({ security_id: 5, rating: "매수", target_price: 0 }), env, H)).rejects.toMatchObject({ status: 400 });
+    await expect(createView(req({ security_id: 5, rating: "매수", target_price: 1, horizon_months: 0 }), env, H)).rejects.toMatchObject({ status: 400 });
+    await expect(createView(req({ security_id: 99, rating: "매수", target_price: 1 }), env, H)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("편집: edited_at, 상승여력은 기록 시점 가격 기준으로 재계산, 스냅샷은 그대로", async () => {
+    const v = (await body(await createView(req({ security_id: 5, rating: "매수", target_price: 260 }), env, H))).view;
+    yahoo.price = 999; // 편집 시점 시세는 쓰지 않는다
+    const r = await body(await patchView(req({ target_price: 300, rating: "적극 매수", price_at: 1 }), env, H, { id: v.id }));
+    expect(r.view.edited_at).toBeTruthy();
+    expect(r.view.price_at).toBe(200);
+    expect(r.view.rating_score).toBe(4);
+    expect(r.view.upside_pct).toBeCloseTo(0.5);
+  });
+
+  it("사건 방식: 새 의견은 새 행, latest는 종목별 최신 하나", async () => {
+    await createView(req({ security_id: 5, rating: "매수", target_price: 260 }), env, H);
+    await new Promise((r) => setTimeout(r, 1100)); // created_at 초 단위
+    await createView(req({ security_id: 5, rating: "비중 확대", target_price: 240 }), env, H);
+    const all = await body(await listViews({}, env, H, {}, url("?security_id=5")));
+    expect(all.views).toHaveLength(2);
+    const latest = await body(await latestViews({}, env, H));
+    expect(latest.views).toHaveLength(1);
+    expect(latest.views[0].rating).toBe("비중 확대");
+  });
+
+  it("삭제", async () => {
+    const v = (await body(await createView(req({ security_id: 5, rating: "중립", target_price: 200 }), env, H))).view;
+    expect((await body(await deleteView({}, env, H, { id: v.id }))).ok).toBe(true);
+    await expect(deleteView({}, env, H, { id: v.id })).rejects.toMatchObject({ status: 404 });
+  });
+});
