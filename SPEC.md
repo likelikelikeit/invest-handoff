@@ -580,6 +580,10 @@ CREATE TABLE meta (
 - 프론트는 SvelteKit이 아닌 **순수 Svelte 5 + Vite + 해시 라우터**. Pages에 서버 폴백이 없어 `#/security/12` 형태로 새로고침 404를 피한다.
 - Worker 이름 `invest-api`(새로 만듦), D1 이름 `invest`. 기존 배포 Worker는 마일스톤 2까지 index.html용으로 남겨두고 이후 삭제.
 - 루트 `package.json`에 npm workspaces(`web`, `worker`)로 lockfile 하나.
+- 기존 `/?symbols=` 시세 경로는 `/quotes?symbols=`로 옮겼다. 응답에 `source: "yahoo(delayed)"`와 종목별 `time`(야후 마지막 체결 시각)을 더했다.
+- merge는 서버 `POST /portfolio/merge`가 받는다(종목 ysym upsert, 기존 종목 이름은 유지, `asOwned`면 positions 덮어씀). `normalize`는 프론트 `web/src/lib/calc/`에서 먼저 거친다(M2에서 이식).
+- 시드는 `portfolio.json`의 `baseQty`/`baseAvg`(실제 보유 기준)를 쓰고, 평단이 원화 환산값이라 `avg_ccy='KRW'`.
+- 시각 문자열은 `views.created_at` 규칙(ISO 8601 + `+09:00`, 초 단위)을 모든 테이블에 쓴다.
 - §3.3·§5.1·§5.5에서 "나중에 추가"라던 `securities.archived_at`, `securities.asset_class`, `position_changes`, `portfolio_scenarios`는 배포 전이라 `0001_init.sql`에 바로 넣었다.
 
 ### 7.2 인증 [확정: 1차]

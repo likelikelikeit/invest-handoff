@@ -41,6 +41,6 @@
 4. 바꾼 [제안] 항목이 있으면 `SPEC.md`도 함께 고친다. 문서와 코드가 어긋나게 두지 않는다.
 
 ## 넘겨받은 파일
-- `worker.js` — 현재 Cloudflare에 배포되어 동작 중인 Worker. 마일스톤 1에서 `worker/src/`로 흡수.
+- `worker.js` — 마일스톤 1에서 `worker/src/`로 흡수하고 삭제했다(git 이력에 남아 있음). 옛 배포본은 index.html용으로 마일스톤 2까지 Cloudflare에 남겨둔다.
 - `index.html` — 순수 JS 시뮬레이터. 로직과 디자인 톤의 기준점. 마일스톤 2에서 Svelte로 이식.
 - `portfolio.json` — 사용자 실제 보유. **커밋 금지.** D1 시드 전용.

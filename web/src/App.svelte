@@ -2,6 +2,7 @@
   import { route } from "./lib/router.svelte.js";
   import { TABS, activeTab } from "./lib/tabs.js";
   import Placeholder from "./routes/Placeholder.svelte";
+  import More from "./routes/More.svelte";
 
   const current = $derived(activeTab(route.parts));
   const titles = Object.fromEntries(TABS.map((t) => [t.key, t.label]));
@@ -19,6 +20,8 @@
   <main class="wrap">
     {#if route.parts[0] === "security" && route.parts[1]}
       <Placeholder title="종목 상세" note={"id " + route.parts[1]} />
+    {:else if current === "more"}
+      <More />
     {:else}
       <Placeholder title={titles[current]} note="준비 중" />
     {/if}

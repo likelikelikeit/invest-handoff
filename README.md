@@ -15,6 +15,30 @@ npm run db:migrate:local -w worker
 npm run worker:dev               # Worker http://127.0.0.1:8787/health
 ```
 
+API 스모크 테스트는 로컬 Worker를 띄운 상태에서 `node worker/scripts/smoke.mjs http://127.0.0.1:8787 local-dev-token`.
+
+## 보유 시드 (portfolio.json → D1)
+
+```bash
+cd worker
+node scripts/seed.mjs            # ../portfolio.json → .seed/seed.sql (gitignore)
+npx wrangler d1 execute invest --remote --file .seed/seed.sql
+```
+
+여러 번 돌려도 같은 결과(upsert). 로컬은 `--remote` 대신 `--local`.
+
+## API (전부 `Authorization: Bearer <APP_TOKEN>`, `/health`만 예외)
+
+| 경로 | 설명 |
+|---|---|
+| `GET /portfolio` | 보유(종목 정보 포함) + 현금 |
+| `POST /portfolio/merge` | `{rows, asOwned}` ysym 기준 upsert. asOwned면 보유도 덮어씀 |
+| `PUT·DELETE /portfolio/positions/:securityId` | 보유 한 종목 |
+| `GET·POST /securities`, `GET·PATCH·DELETE /securities/:id` | 종목. DELETE는 숨김(archived_at) |
+| `GET·POST /watchlist`, `DELETE /watchlist/:id` | 관심종목 |
+| `GET /cash`, `PUT /cash/KRW\|USD` | 현금 |
+| `GET /quotes?symbols=`, `GET /search?q=`, `POST /import?mt=` | 기존 worker.js 경로 |
+
 Worker 로컬 비밀값은 `worker/.dev.vars.example`를 `worker/.dev.vars`로 복사해서 채운다.
 
 ## Cloudflare 최초 설정 (한 번)
