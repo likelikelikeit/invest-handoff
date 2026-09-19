@@ -10,6 +10,8 @@ import {
   getPortfolio, putPosition, deletePosition, mergePortfolio,
   listChanges, patchChange, listScenarios, createScenario, deleteScenario,
 } from "./routes/portfolio.js";
+import { getPrices, backfillPrices, getStatus } from "./routes/prices.js";
+import { runDaily, CRON_KR, CRON_US } from "./cron/daily.js";
 
 const ID = "(?<id>\\d+)";
 
@@ -38,6 +40,10 @@ const ROUTES = [
   ["GET", "/watchlist", listWatchlist],
   ["POST", "/watchlist", addWatch],
   ["DELETE", "/watchlist/" + ID, removeWatch],
+
+  ["GET", "/prices/" + ID, getPrices],
+  ["POST", "/prices/" + ID + "/backfill", backfillPrices],
+  ["GET", "/status", getStatus],
 
   ["GET", "/cash", listCash],
   ["PUT", "/cash/(?<currency>KRW|USD)", putCash],
@@ -89,5 +95,11 @@ export default {
       const status = e instanceof HttpError ? e.status : 500;
       return json({ ok: false, error: String(e.message || e) }, status, headers);
     }
+  },
+
+  // 크론 (SPEC §7.3). 어떤 크론인지는 event.cron 문자열로 가른다.
+  async scheduled(event, env, ctx) {
+    const which = event.cron === CRON_KR ? "kr" : event.cron === CRON_US ? "us" : null;
+    if (which) ctx.waitUntil(runDaily(env, which, new Date(event.scheduledTime)));
   },
 };
