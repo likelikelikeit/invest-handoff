@@ -1,6 +1,6 @@
 // 포트폴리오 계산 (SPEC §5.5). 기존 index.html의 computed/setQty/setWeight/통계/주문서를 순수 함수로 옮겼다.
 // 금액은 전부 원화. holding 모양:
-//   {id, name, tick, mkt, sec, ysym, currency, price, priceNative, qty, avg, baseQty, baseAvg, realized, brandColor, stale}
+//   {id, name, tick, mkt, sec, assetClass, expectedReturnPct, ysym, currency, price, priceNative, qty, avg, baseQty, baseAvg, realized, brandColor, stale}
 // state 모양: {holdings, removed, deposit}
 //   deposit = 시작 현금(실제 현금 원화 환산 + 추가 납입금). 매매로 변하지 않는다.
 
@@ -23,6 +23,8 @@ export function holdingFromPosition(p, quote, fx) {
     tick: s.ticker,
     mkt: s.market,
     sec: s.sector || "기타",
+    assetClass: s.asset_class || "equity",
+    expectedReturnPct: s.expected_return_pct,
     ysym: s.ysym,
     isin: s.isin,
     currency: s.currency,
@@ -143,7 +145,7 @@ function groupSum(items, keyOf, cash) {
 /** 집중도·분류별·시장별 */
 export function stats(state, c) {
   const vals = state.holdings
-    .map((h) => ({ n: h.name, v: h.qty * h.price, sec: h.sec, mkt: h.mkt }))
+    .map((h) => ({ n: h.name, v: h.qty * h.price, sec: h.sec, mkt: h.mkt, asset: h.assetClass || "equity" }))
     .filter((x) => x.v > 0)
     .sort((a, b) => b.v - a.v);
   const stockSum = vals.reduce((a, b) => a + b.v, 0);
@@ -164,5 +166,107 @@ export function stats(state, c) {
     cashPct: pctOf(c.cash),
     bySector: groupSum(vals, (x) => x.sec, c.cash),
     byMarket: groupSum(vals, (x) => (x.mkt === "KR" ? "국내" : "해외"), c.cash),
+    byAsset: groupSum(vals, (x) => ({ equity: "주식", bond: "채권", cash: "현금", other: "기타" }[x.asset] || "기타"), c.cash),
   };
+}
+
+/** 가격 행([[date,...,close]]) → 날짜별 단순 일간 수익률. */
+export function dailyReturns(rows) {
+  const out = new Map();
+  let prev = null;
+  for (const row of rows || []) {
+    const close = Number(row[4]);
+    if (prev > 0 && close > 0) out.set(row[0], close / prev - 1);
+    if (close > 0) prev = close;
+  }
+  return out;
+}
+
+function sampleCov(xs, ys) {
+  if (xs.length < 2 || xs.length !== ys.length) return null;
+  const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
+  const my = ys.reduce((a, b) => a + b, 0) / ys.length;
+  return xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0) / (xs.length - 1);
+}
+
+function paired(a, b) {
+  const xs = [], ys = [];
+  for (const [date, x] of a) {
+    if (b.has(date)) { xs.push(x); ys.push(b.get(date)); }
+  }
+  return [xs, ys];
+}
+
+/**
+ * 종목별 1년 일봉으로 연환산 변동성·상관, 사용자 가정으로 기대수익률을 계산한다.
+ * histories는 Map 또는 { [security_id]: rows }. 현금 기대수익률·변동성은 0으로 둔다.
+ */
+export function riskMetrics(holdings, histories, cash = 0) {
+  const valueOf = (h) => Math.max(0, h.qty * h.price);
+  const stock = holdings.reduce((s, h) => s + valueOf(h), 0);
+  const total = stock + Number(cash || 0);
+  const rowsOf = (id) => histories instanceof Map ? histories.get(id) : histories?.[id];
+  const assets = holdings.filter((h) => valueOf(h) > 0).map((h) => ({
+    h, weight: total > 0 ? valueOf(h) / total : 0, returns: dailyReturns(rowsOf(h.id)),
+  }));
+
+  const assumed = assets.filter((a) => a.h.expectedReturnPct != null && a.h.expectedReturnPct !== "" && Number.isFinite(Number(a.h.expectedReturnPct)));
+  const expectedCoverage = assets.reduce((s, a) => s + a.weight, 0) > 0
+    ? assumed.reduce((s, a) => s + a.weight, 0) / assets.reduce((s, a) => s + a.weight, 0) : 0;
+  const expectedReturn = assets.length && assumed.length === assets.length
+    ? assumed.reduce((s, a) => s + a.weight * Number(a.h.expectedReturnPct) / 100, 0) : null;
+
+  const usable = assets.filter((a) => a.returns.size >= 20);
+  let variance = 0;
+  let covarianceReady = usable.length > 0;
+  for (let i = 0; i < usable.length; i++) {
+    for (let j = 0; j < usable.length; j++) {
+      const [xs, ys] = paired(usable[i].returns, usable[j].returns);
+      const cov = xs.length >= 20 ? sampleCov(xs, ys) : null;
+      if (cov == null) covarianceReady = false;
+      else variance += usable[i].weight * usable[j].weight * cov * 252;
+    }
+  }
+
+  const correlations = [];
+  for (let i = 0; i < usable.length; i++) {
+    for (let j = i + 1; j < usable.length; j++) {
+      const [xs, ys] = paired(usable[i].returns, usable[j].returns);
+      if (xs.length < 20) continue;
+      const cov = sampleCov(xs, ys);
+      const vx = sampleCov(xs, xs), vy = sampleCov(ys, ys);
+      if (!(vx > 0) || !(vy > 0)) continue;
+      correlations.push({
+        a: usable[i].h.name, b: usable[j].h.name,
+        value: cov / Math.sqrt(vx * vy), observations: xs.length,
+      });
+    }
+  }
+  correlations.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  const riskWeight = usable.reduce((s, a) => s + a.weight, 0);
+  return {
+    expectedReturn,
+    expectedCoverage,
+    volatility: covarianceReady && variance >= 0 ? Math.sqrt(variance) : null,
+    riskCoverage: stock > 0 ? (riskWeight * total) / stock : 0,
+    correlations,
+  };
+}
+
+/** 단일 종목·섹터 상한은 경고만 돌려준다. 거래를 막지 않는다. */
+export function constraintWarnings(state, c, limits = {}) {
+  if (!(c.total > 0)) return [];
+  const single = Number(limits.singlePct);
+  const sector = Number(limits.sectorPct);
+  const warnings = [];
+  const bySector = new Map();
+  for (const h of state.holdings) {
+    const pct = h.qty * h.price / c.total * 100;
+    if (single > 0 && pct > single) warnings.push({ type: "single", label: h.name, pct, limit: single });
+    bySector.set(h.sec, (bySector.get(h.sec) || 0) + pct);
+  }
+  if (sector > 0) {
+    for (const [label, pct] of bySector) if (pct > sector) warnings.push({ type: "sector", label, pct, limit: sector });
+  }
+  return warnings.sort((a, b) => b.pct - a.pct);
 }

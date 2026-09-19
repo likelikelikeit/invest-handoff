@@ -35,7 +35,7 @@ node scripts/backfill.mjs          # 이력이 부족한 추적 종목만 5년�
 SEC_USER_AGENT="이름 이메일" node scripts/sec-history.mjs   # 미국 종목 분기 재무 이력(SEC, 분할 보정). 새 미국 종목을 추가한 뒤 한 번
 ```
 
-크론(UTC `0 7 * * 1-5`, `0 22 * * 1-5`)이 이후 매일 최근 5일 봉과 보유 스냅샷을 채운다. 일요일 `0 23 * * SUN`에는 재무·컨센서스를 최대 8종목씩, 매일 `30 23 * * *`에는 거시(FRED·ECOS)와 미국 다음 실적일을 갱신한다(`FRED_API_KEY`, `ECOS_API_KEY` 시크릿 필요). 로컬 시험: `npx wrangler dev --test-scheduled` 후 `curl "http://127.0.0.1:8787/__scheduled?cron=0+22+*+*+1-5"`.
+크론(UTC `0 7 * * 1-5`, `0 22 * * 1-5`)이 이후 매일 최근 5일 봉과 보유 스냅샷을 채운다. 미국장 크론은 만기가 지난 투자의견의 적중·실제수익률도 평가한다. 일요일 `0 23 * * SUN`에는 재무·컨센서스를 최대 8종목씩, 매일 `30 23 * * *`에는 거시(FRED·ECOS)와 미국 다음 실적일을 갱신한다(`FRED_API_KEY`, `ECOS_API_KEY` 시크릿 필요). 로컬 시험: `npx wrangler dev --test-scheduled` 후 `curl "http://127.0.0.1:8787/__scheduled?cron=0+22+*+*+1-5"`.
 
 ## API (전부 `Authorization: Bearer <APP_TOKEN>`, `/health`만 예외)
 
@@ -46,7 +46,7 @@ SEC_USER_AGENT="이름 이메일" node scripts/sec-history.mjs   # 미국 종목
 | `PUT·DELETE /portfolio/positions/:securityId` | 보유 한 종목 (수량이 바뀌면 응답 `changes`) |
 | `GET /portfolio/changes?pending=1`, `PATCH /portfolio/changes/:id` | 보유 변화 기록과 이유 `{reason}` 또는 `{skipped:true}` |
 | `GET·POST /portfolio/scenarios`, `DELETE /portfolio/scenarios/:id` | 저장한 시뮬 |
-| `GET·POST /securities`, `GET·PATCH·DELETE /securities/:id` | 종목. DELETE는 숨김(archived_at) |
+| `GET·POST /securities`, `GET·PATCH·DELETE /securities/:id` | 종목. PATCH로 자산군·연 기대수익률(%) 설정, DELETE는 숨김(archived_at) |
 | `GET·POST /watchlist`, `DELETE /watchlist/:id` | 관심종목 |
 | `GET /prices/:id?range=1m\|3m\|1y\|3y\|5y\|10y\|max` | 일봉 `[[date,o,h,l,c,v]]` + 전체 이력 first/last/count |
 | `POST /prices/:id/backfill` | 이력이 비었으면 5년, 있으면 최근 5일 |

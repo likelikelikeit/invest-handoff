@@ -3,7 +3,7 @@
   import { route } from "./lib/router.svelte.js";
   import { TABS, activeTab } from "./lib/tabs.js";
   import { settings } from "./lib/api.js";
-  import { load } from "./lib/data.svelte.js";
+  import { data, load } from "./lib/data.svelte.js";
   import { ui, askChanges, loadPendingChanges } from "./lib/ui.svelte.js";
   import { applySavedTheme } from "./lib/theme.js";
   import Placeholder from "./routes/Placeholder.svelte";
@@ -44,6 +44,7 @@
 </script>
 
 <div class="shell">
+  {#if data.offline}<div class="offline" role="status">오프라인 · 마지막 저장 데이터를 표시합니다</div>{/if}
   <nav class="tabbar" aria-label="주요 화면">
     {#each TABS as t (t.key)}
       <a href={t.href} class:on={current === t.key} aria-current={current === t.key ? "page" : undefined}>
@@ -87,6 +88,7 @@
 </div>
 
 <style>
+  .offline{position:sticky;top:0;z-index:12;padding:6px 16px;text-align:center;background:var(--orange);color:#111;font-size:12.5px;font-weight:650}
   .wrap{max-width:1180px;margin:0 auto;padding:0 clamp(16px,3.5vw,32px) calc(var(--tabbar-h) + 96px + env(safe-area-inset-bottom))}
 
   /* 모바일: 하단 고정 탭 */
@@ -115,6 +117,7 @@
 
   /* 데스크톱: 상단 가로 탭 (SPEC §4.8 넓은 레이아웃은 화면마다 따로 잡는다) */
   @media (min-width:900px){
+    .offline{top:0}
     .tabbar{
       position:sticky;top:0;bottom:auto;height:auto;padding:0 clamp(16px,3.5vw,32px);
       display:flex;gap:4px;justify-content:center;

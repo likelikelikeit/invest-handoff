@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   holdingFromPosition, cashParts, computed, setQty, qtyForWeight, removeHolding, orders, stats, slices,
+  dailyReturns, riskMetrics, constraintWarnings,
 } from "./portfolio.js";
 import { normalize, toMergeRow, krIsin, guessYsym } from "./normalize.js";
 import { assignColors, SECTORS } from "./colors.js";
@@ -77,6 +78,36 @@ describe("stats", () => {
     expect(Math.round(st.hhi)).toBe(5000);
     expect(st.hhiVerdict).toBe("한쪽으로 쏠림");
     expect(st.byMarket.map((x) => x.key).sort()).toEqual(["국내", "해외"]);
+    expect(st.byAsset.map((x) => x.key)).toContain("주식");
+  });
+});
+
+describe("riskMetrics", () => {
+  const rows = (closes) => closes.map((close, i) => [`2026-01-${String(i + 1).padStart(2, "0")}`, null, null, null, close]);
+  it("기대수익률은 비중 가중, 변동성은 공분산×252", () => {
+    const a = h({ id: 1, name: "A", qty: 5, expectedReturnPct: 10 });
+    const b = h({ id: 2, name: "B", qty: 5, expectedReturnPct: 6 });
+    const ra = Array.from({ length: 30 }, (_, i) => 100 * (1 + (i % 2 ? .01 : -.005)) ** i);
+    const rb = Array.from({ length: 30 }, (_, i) => 100 * (1 + (i % 3 ? .004 : -.003)) ** i);
+    const r = riskMetrics([a, b], { 1: rows(ra), 2: rows(rb) }, 0);
+    expect(r.expectedReturn).toBeCloseTo(.08);
+    expect(r.expectedCoverage).toBe(1);
+    expect(r.volatility).toBeGreaterThan(0);
+    expect(r.correlations).toHaveLength(1);
+  });
+  it("가정이나 20개 수익률이 모자라면 해당 지표를 숨긴다", () => {
+    const r = riskMetrics([h({ expectedReturnPct: null })], { 1: rows([100, 101]) }, 0);
+    expect(r.expectedReturn).toBeNull();
+    expect(r.volatility).toBeNull();
+  });
+  it("일간 수익률은 첫 행을 제외한다", () => expect([...dailyReturns(rows([100, 110])).values()][0]).toBeCloseTo(.1));
+});
+
+describe("constraintWarnings", () => {
+  it("단일 종목과 섹터 상한 초과를 함께 알린다", () => {
+    const s = { holdings: [h({ id: 1, name: "A", sec: "반도체", qty: 8, baseQty: 8 }), h({ id: 2, name: "B", sec: "반도체", qty: 2, baseQty: 2 })], removed: [], deposit: 0 };
+    const w = constraintWarnings(s, computed(s), { singlePct: 60, sectorPct: 80 });
+    expect(w.map((x) => x.type)).toEqual(["sector", "single"]);
   });
 });
 

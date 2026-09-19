@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { api, settings, ApiError, DEFAULT_API_BASE } from "./api.js";
 import { qtyStr, won, pct } from "./format.js";
 
@@ -13,6 +13,7 @@ describe("api", () => {
   beforeEach(() => {
     localStorage.clear();
   });
+  afterEach(() => vi.unstubAllGlobals());
 
   it("기본 주소와 Bearer 토큰을 붙인다", async () => {
     settings.token = "  abc  ";
@@ -41,6 +42,19 @@ describe("api", () => {
     const p = api("/x", { fetchImpl: async () => { throw new TypeError("fail"); } });
     await expect(p).rejects.toBeInstanceOf(ApiError);
     await expect(p).rejects.toMatchObject({ status: 0 });
+  });
+
+  it("GET 성공 응답을 저장하고 오프라인이면 마지막 응답을 돌려준다", async () => {
+    const saved = new Map();
+    vi.stubGlobal("caches", { open: async () => ({
+      put: async (key, res) => saved.set(key, await res.json()),
+      match: async (key) => saved.has(key) ? { json: async () => saved.get(key) } : null,
+    }) });
+    await api("/portfolio", { fetchImpl: fakeFetch(200, { ok: true, positions: [1] }, []) });
+    const out = await api("/portfolio", { fetchImpl: async () => { throw new TypeError("offline"); } });
+    expect(out.positions).toEqual([1]);
+    expect(out._offline).toBe(true);
+    expect(out._cached_at).toBeTruthy();
   });
 });
 

@@ -24,6 +24,12 @@ const FIELDS = {
   currency: (v) => oneOf(v, CURRENCIES, "currency"),
   sector: (v) => (v == null || v === "" ? null : str(v, "sector")),
   asset_class: (v) => oneOf(v, ASSET_CLASSES, "asset_class"),
+  expected_return_pct: (v) => {
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < -100 || n > 100) throw new HttpError(400, "expected_return_pct는 -100~100 사이 숫자여야 합니다");
+    return n;
+  },
   logo_url: (v) => (v == null || v === "" ? null : str(v, "logo_url")),
   brand_color: (v) => {
     if (v == null || v === "") return null;

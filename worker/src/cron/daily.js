@@ -11,6 +11,7 @@ import { upsertPricesStmt, trackedSecurities, snapshotStmt, BACKFILL_MIN_ROWS } 
 import { nowIso } from "../lib/time.js";
 import { refreshFundamentals } from "./weekly.js";
 import { fillCallPricesStmts } from "../routes/tech.js";
+import { evaluateViews } from "../lib/view-evaluation.js";
 
 export const CRON_KR = "0 7 * * 1-5";
 export const CRON_US = "0 22 * * 1-5";
@@ -69,6 +70,8 @@ export async function runDaily(env, which, now = new Date()) {
   const snap = await snapshotStmt(env, date, which === "kr" ? "KR" : "ALL").run();
   // 판정 기록의 1주·1개월 뒤 가격 (계기판 자체 평가용, SPEC §5.6.5). 쿼리 2개.
   const filled = await env.DB.batch(fillCallPricesStmts(env));
+  // 전체 스냅샷이 확정되는 미국장 크론에서만 의견 만기 평가. 한 번에 D1 쿼리 3개.
+  const viewsEvaluated = which === "us" ? await evaluateViews(env, now) : 0;
 
   // 국내 재무 이력 보강 (한 종목). 실패해도 시세·스냅샷 결과는 그대로 남긴다.
   let dart = null;
@@ -90,7 +93,7 @@ export async function runDaily(env, which, now = new Date()) {
   const report = {
     at: nowIso(now), which, date,
     updated: a.ok, backfilled: b.ok, snapshots: snap.meta.changes, dart,
-    tech_filled: filled.reduce((s, r) => s + (r.meta?.changes || 0), 0),
+    tech_filled: filled.reduce((s, r) => s + (r.meta?.changes || 0), 0), views_evaluated: viewsEvaluated,
     errors: a.errors.concat(b.errors, dartErrors),
     truncated: truncated ? daily.length - MAX_DAILY : 0,
   };

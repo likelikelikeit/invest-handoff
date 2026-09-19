@@ -14,7 +14,9 @@
 
 <div class="stamp">
   <span class="num">
-    {#if data.quoteAt}
+    {#if data.offline}
+      오프라인 · {data.cachedAt ? stamp(data.cachedAt) : data.quoteAt ? stamp(data.quoteAt) : "마지막 저장 데이터"} 기준
+    {:else if data.quoteAt}
       시세 {stamp(data.quoteAt)} 기준 · 야후 지연{#if data.fx} · 달러 {data.fx.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원{/if}
     {:else if data.loaded}
       시세 데이터 없음 · 평단으로 표시

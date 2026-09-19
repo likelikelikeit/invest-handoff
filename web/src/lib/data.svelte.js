@@ -16,6 +16,8 @@ export const data = $state({
   market: [], // 시장 띠: 지수·환율 securities
   views: [], // 종목별 현재 투자의견 (/views/latest)
   loaded: false,
+  offline: false,
+  cachedAt: null,
 });
 
 /** 종목 통화 기준 지금 가격 (의견 상승여력 계산용) */
@@ -51,6 +53,8 @@ export async function refreshQuotes(extra = []) {
   if (!syms.length) return;
   try {
     const q = await api("/quotes?symbols=" + encodeURIComponent(syms.join(",")));
+    if (q._offline) { data.offline = true; data.cachedAt = q._cached_at || data.cachedAt; }
+    else data.offline = false;
     data.quotes = { ...data.quotes, ...q.quotes };
     if (q.fx && q.fx.USDKRW) data.fx = q.fx.USDKRW;
     const times = Object.values(q.quotes).map((x) => x.time).filter(Boolean).sort();
@@ -71,6 +75,8 @@ export async function load() {
   data.error = "";
   try {
     const [pf, secs] = await Promise.all([api("/portfolio"), api("/securities")]);
+    data.offline = Boolean(pf._offline || secs._offline);
+    data.cachedAt = pf._cached_at || secs._cached_at || null;
     data.positions = pf.positions;
     data.cash = pf.cash;
     data.market = secs.securities

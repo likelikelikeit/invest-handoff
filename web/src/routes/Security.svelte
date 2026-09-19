@@ -27,6 +27,7 @@
   let busy = $state(false);
   let fundamentals = $state(null);
   let fundErr = $state("");
+  const ASSET_LABELS = { equity: "주식", bond: "채권", cash: "현금", index: "지수", fx: "환율", other: "기타" };
 
   const pos = $derived(data.positions.find((p) => p.security_id === id));
   const q = $derived(sec ? data.quotes[sec.ysym] : null);
@@ -111,7 +112,7 @@
       <Logo h={{ name: sec.name, tick: sec.ticker, mkt: sec.market, isin: sec.isin }} {color} size={48} />
       <div class="t">
         <h1>{sec.name}</h1>
-        <p class="sub">{sec.ticker} · {sec.asset_class === "equity" ? (sec.market === "KR" ? "국내" : "해외") + " · " + (sec.sector || "기타") : sec.asset_class === "fx" ? "환율" : "지수"}</p>
+        <p class="sub">{sec.ticker} · {ASSET_LABELS[sec.asset_class] || "기타"}{sec.asset_class === "equity" ? " · " + (sec.market === "KR" ? "국내" : "해외") + " · " + (sec.sector || "기타") : ""}</p>
       </div>
     </header>
 
@@ -186,6 +187,11 @@
 
     <Section id="sd-meta" title="종목 정보" defaultOpen={false}>
       <div class="edit">
+        <label><span>자산군</span>
+          <select value={sec.asset_class} onchange={(e) => patch({ asset_class: e.currentTarget.value })}>
+            {#each Object.entries(ASSET_LABELS) as [value, label] (value)}<option {value}>{label}</option>{/each}
+          </select>
+        </label>
         <label><span>분류</span>
           <select value={sec.sector || "기타"} onchange={(e) => patch({ sector: e.currentTarget.value })}>
             {#each SECTOR_NAMES as k (k)}<option value={k}>{k}</option>{/each}

@@ -9,11 +9,13 @@
   import SimRow from "../components/SimRow.svelte";
   import Donut from "../components/Donut.svelte";
   import Sheet from "../components/Sheet.svelte";
+  import RiskSummary from "../components/RiskSummary.svelte";
   import { data, holdings, cash, load } from "../lib/data.svelte.js";
   import { api } from "../lib/api.js";
   import { ui, toast } from "../lib/ui.svelte.js";
   import * as S from "../lib/sim.svelte.js";
-  import { computed, stats, orders, slices } from "../lib/calc/portfolio.js";
+  import { computed, stats, orders, slices, riskMetrics, constraintWarnings } from "../lib/calc/portfolio.js";
+  import { store } from "../lib/storage.js";
   import { assignColors } from "../lib/calc/colors.js";
   import { won, wonSigned, pctSigned, qtyStr, tone, parseNum, stamp } from "../lib/format.js";
 
@@ -22,6 +24,44 @@
   const realCash = $derived(cash());
   const realState = $derived({ holdings: real, removed: [], deposit: realCash.total });
   const realStats = $derived(stats(realState, computed(realState)));
+  let histories = $state({});
+  let riskLoading = $state(false);
+  let riskError = $state("");
+  const riskKey = $derived(data.positions.map((p) => p.security_id).sort((a, b) => a - b).join(","));
+
+  function readLimits() {
+    try { return { singlePct: 25, sectorPct: 40, ...JSON.parse(store.get("invest.constraints", "{}")) }; }
+    catch { return { singlePct: 25, sectorPct: 40 }; }
+  }
+  let limits = $state(readLimits());
+  function saveLimits(next) {
+    limits = next;
+    store.set("invest.constraints", JSON.stringify(next));
+  }
+
+  async function loadRiskData() {
+    riskLoading = true;
+    riskError = "";
+    try {
+      const pairs = await Promise.all(real.map(async (h) => [h.id, (await api("/prices/" + h.id + "?range=1y")).rows]));
+      histories = Object.fromEntries(pairs);
+    } catch (e) {
+      riskError = e.message;
+    } finally { riskLoading = false; }
+  }
+  $effect(() => { if (data.loaded) { riskKey; loadRiskData(); } });
+
+  async function saveExpected(id, value) {
+    try {
+      const out = await api("/securities/" + id, { method: "PATCH", body: { expected_return_pct: value } });
+      const p = data.positions.find((x) => x.security_id === id);
+      if (p) p.security = out.security;
+      toast("기대수익률 가정을 저장했습니다");
+    } catch (e) { toast("실패: " + e.message); }
+  }
+
+  const realRisk = $derived(riskMetrics(real, histories, realCash.total));
+  const realWarnings = $derived(constraintWarnings(realState, computed(realState), limits));
 
   let cashKrw = $state("");
   let cashUsd = $state("");
@@ -66,6 +106,8 @@
   const simSlices = $derived(st ? slices(st.holdings, simColors, c.cash > 0.5 ? [{ key: "cash", label: "현금", value: c.cash, color: "var(--cash-krw)" }] : []) : []);
   const ords = $derived(st ? orders(st) : null);
   const simStats = $derived(st ? stats(st, c) : null);
+  const simRisk = $derived(st ? riskMetrics(st.holdings, histories, c.cash) : null);
+  const simWarnings = $derived(st ? constraintWarnings(st, c, limits) : []);
   let hoverId = $state(null);
 
   function startSim() {
@@ -141,6 +183,11 @@
 
     <Section id="pf-stats" title="비중">
       <StatsBlock st={realStats} />
+    </Section>
+
+    <Section id="pf-risk" title="위험과 제약" note="내 가정과 계산값">
+      <RiskSummary holdings={real} risk={realRisk} loading={riskLoading} error={riskError} {limits} warnings={realWarnings}
+        editable onExpected={saveExpected} onLimits={saveLimits} />
     </Section>
 
     <Section id="pf-scenarios" title="저장한 시뮬" note={scenarios.length ? scenarios.length + "개" : ""}>
@@ -224,6 +271,11 @@
 
     <Section id="sim-stats" title="비중">
       <StatsBlock st={simStats} />
+    </Section>
+
+    <Section id="sim-risk" title="위험과 제약" note="시뮬 비중 반영">
+      <RiskSummary holdings={st.holdings} risk={simRisk} loading={riskLoading} error={riskError} {limits} warnings={simWarnings}
+        onLimits={saveLimits} />
     </Section>
 
     <div class="simfoot">

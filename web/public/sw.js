@@ -1,4 +1,30 @@
-// 최소 서비스 워커: 설치 가능 조건만 채운다. fetch 핸들러가 없어 모든 요청은 평소처럼 네트워크로 간다.
-// 오프라인에서 마지막 데이터를 보여주는 캐시는 마일스톤 8에서 붙인다 (SPEC §7.6).
-self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
+// M8 오프라인 셸. API JSON은 토큰별로 web/src/lib/api.js가 Cache API에 저장한다.
+const SHELL = "invest-shell-v1";
+const CORE = ["./", "./manifest.webmanifest", "./icon.svg", "./apple-touch-icon.png", "./icon-192.png", "./icon-512.png"];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(caches.open(SHELL).then((cache) => cache.addAll(CORE)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(caches.keys().then((keys) => Promise.all(
+    keys.filter((key) => key.startsWith("invest-shell-") && key !== SHELL).map((key) => caches.delete(key))
+  )).then(() => self.clients.claim()));
+});
+
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  const url = new URL(req.url);
+  if (req.method !== "GET" || url.origin !== self.location.origin) return;
+  if (req.mode === "navigate") {
+    event.respondWith(fetch(req).then((res) => {
+      if (res.ok) caches.open(SHELL).then((cache) => cache.put("./", res.clone()));
+      return res;
+    }).catch(() => caches.match("./")));
+    return;
+  }
+  event.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((res) => {
+    if (res.ok) caches.open(SHELL).then((cache) => cache.put(req, res.clone()));
+    return res;
+  })));
+});

@@ -7,6 +7,9 @@
 
   function color(k) {
     if (k === "현금") return "var(--sub2)";
+    if (k === "주식") return "var(--accent)";
+    if (k === "채권") return "#34c759";
+    if (k === "기타") return "#af52de";
     if (k === "국내") return "#0071e3";
     if (k === "해외") return "#ff2d55";
     return sectorColor(k);
@@ -25,7 +28,7 @@
       <div><dt>현금 비중</dt><dd class="num">{pct(st.cashPct)}</dd></div>
     </dl>
   </div>
-  {#each [["분류별", st.bySector], ["시장별", st.byMarket]] as [title, groups] (title)}
+  {#each [["자산군별", st.byAsset], ["분류별", st.bySector], ["시장별", st.byMarket]] as [title, groups] (title)}
     {@const tot = totalOf(groups)}
     {@const max = groups.length ? groups[0].value : 1}
     <div class="col">
@@ -57,5 +60,5 @@
   .sub{color:var(--sub2);font-weight:450}
   .bt{height:6px;border-radius:99px;background:var(--track);overflow:hidden}
   .bf{height:100%;border-radius:99px;transition:width .35s cubic-bezier(.22,1,.36,1)}
-  @media (min-width:900px){ .stats{grid-template-columns:repeat(3,1fr);gap:40px} }
+  @media (min-width:900px){ .stats{grid-template-columns:repeat(4,1fr);gap:32px} }
 </style>
