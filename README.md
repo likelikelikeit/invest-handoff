@@ -55,6 +55,9 @@ SEC_USER_AGENT="이름 이메일" node scripts/sec-history.mjs   # 미국 종목
 | `GET /fundamentals/:id` | 분기·연간 재무, 최근 컨센서스, 다음 실적일 |
 | `POST /fundamentals/:id/refresh` | 해당 종목 재무·컨센서스 즉시 갱신 |
 | `GET·POST /scenarios?security_id=`, `DELETE /scenarios/:id` | 종목별 bear/base/bull 밸류에이션 가정 조회·저장·삭제 |
+| `GET /tech/:id?side=buy|sell` | 판정 계기판(5지표·라벨·참고, 지연 현재가 포함) |
+| `POST /tech/:id/calls`, `PATCH /tech/calls/:id`, `GET /tech/calls?security_id=` | 판정 기록·행동·목록 (1주·1개월 뒤 가격은 크론) |
+| `GET·POST /tech/rules`, `GET /tech/rules/history` | 판정 규칙(저장 = 새 버전) |
 | `GET /status` | 크론 마지막 실행 보고 |
 | `GET /cash`, `PUT /cash/KRW\|USD` | 현금 |
 | `GET /quotes?symbols=`, `GET /search?q=`, `POST /import?mt=` | 기존 worker.js 경로 |

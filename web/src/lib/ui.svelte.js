@@ -7,6 +7,7 @@ export const ui = $state({
   add: null, // 종목 추가 시트: { prefill? } 또는 null
   importOpen: false, // 스크린샷 가져오기
   changes: [], // 답할 보유 변화 (변화 감지 질문)
+  tech: null, // 판정 시트: { securityId?, side } 또는 null
   viewForm: null, // 의견 기록/편집 시트: { securityId?, edit? } 또는 null
   toast: "",
 });

@@ -13,11 +13,13 @@
   import Portfolio from "./routes/Portfolio.svelte";
   import More from "./routes/More.svelte";
   import Views from "./routes/Views.svelte";
+  import Rules from "./routes/Rules.svelte";
   import Fab from "./components/Fab.svelte";
   import AddSheet from "./components/AddSheet.svelte";
   import ImportSheet from "./components/ImportSheet.svelte";
   import ChangeSheet from "./components/ChangeSheet.svelte";
   import ViewForm from "./components/ViewForm.svelte";
+  import TechSheet from "./components/TechSheet.svelte";
 
   const current = $derived(activeTab(route.parts));
   const titles = Object.fromEntries(TABS.map((t) => [t.key, t.label]));
@@ -59,6 +61,8 @@
       <Portfolio />
     {:else if current === "views"}
       <Views />
+    {:else if current === "more" && route.parts[1] === "rules"}
+      <Rules />
     {:else if current === "more"}
       <More />
     {:else}
@@ -71,6 +75,7 @@
   <ImportSheet />
   <ChangeSheet />
   <ViewForm />
+  <TechSheet />
 
   {#if ui.toast}<div class="toast" role="status">{ui.toast}</div>{/if}
 </div>

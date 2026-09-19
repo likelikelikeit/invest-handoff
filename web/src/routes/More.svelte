@@ -68,6 +68,7 @@
 
 <div class="page">
   <ul class="menu">
+    <li><a class="mlink" href="#/more/rules"><span class="m1">판정 규칙</span><span class="m2">매수·매도 계기판의 과열·침체 기준과 가중치 (버전 이력)</span></a></li>
     <li><button onclick={() => (ui.importOpen = true)} disabled={!settings.token}>
       <span class="m1">스크린샷 가져오기</span><span class="m2">증권사 보유 화면 캡처로 보유 갱신</span>
     </button></li>
@@ -129,7 +130,7 @@
   .page{max-width:640px;margin:0 auto}
   .menu{list-style:none;border-top:1px solid var(--line-soft)}
   .menu li{border-bottom:1px solid var(--line-soft)}
-  .menu button{width:100%;display:flex;flex-direction:column;align-items:flex-start;min-height:60px;padding:12px 0;text-align:left}
+  .menu button,.menu .mlink{width:100%;display:flex;flex-direction:column;align-items:flex-start;min-height:60px;padding:12px 0;text-align:left}
   .menu button:disabled{opacity:.45}
   .m1{font-size:16px;font-weight:600}
   .m2{font-size:13px;color:var(--sub2)}

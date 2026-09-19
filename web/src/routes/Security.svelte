@@ -8,6 +8,7 @@
   import Fundamentals from "../components/Fundamentals.svelte";
   import Valuation from "../components/Valuation.svelte";
   import MyViews from "../components/MyViews.svelte";
+  import TechCalls from "../components/TechCalls.svelte";
   import RatingChip from "../components/RatingChip.svelte";
   import { upsideNow } from "../lib/calc/views.js";
   import { data, load, refreshQuotes } from "../lib/data.svelte.js";
@@ -136,6 +137,11 @@
         {/if}
         <button class="btn sm primary" onclick={() => (ui.viewForm = { securityId: id })}>새 의견 기록</button>
       </div>
+      <!-- 판정 계기판 (SPEC §5.6): 매수는 모든 종목, 매도는 보유 종목만 (사용자 결정) -->
+      <div class="tech-btns">
+        <button class="btn sm" onclick={() => (ui.tech = { securityId: id, side: "buy" })}>지금 사도 될까</button>
+        {#if h}<button class="btn sm" onclick={() => (ui.tech = { securityId: id, side: "sell" })}>지금 팔아도 될까</button>{/if}
+      </div>
     {/if}
 
     <Section id="sd-overview" title="개요">
@@ -154,6 +160,10 @@
 
       <Section id="sd-views" title="내 의견" note={view ? "최근 " + stamp(view.created_at) : ""}>
         <MyViews {id} fmt={valueFmt(sec)} />
+      </Section>
+
+      <Section id="sd-tech" title="판정 기록" note="단기 부담 계기판 · 의견과 별개" defaultOpen={false}>
+        <TechCalls {id} fmt={valueFmt(sec)} />
       </Section>
     {/if}
 
@@ -204,6 +214,8 @@
   .mine-view{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 0 16px}
   .mv{font-size:14px;font-weight:600}
   .mine-view .btn{margin-left:auto}
+  .tech-btns{display:flex;gap:8px;padding:0 0 16px}
+  .tech-btns .btn{flex:1;min-height:40px}
   .p{font-size:clamp(28px,6vw,36px);font-weight:700;letter-spacing:-.03em}
   .d{font-size:16px;font-weight:600}
   .k{font-size:14px;color:var(--sub)}
