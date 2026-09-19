@@ -10,6 +10,7 @@ import { history } from "../sources/yahoo.js";
 import { upsertPricesStmt, trackedSecurities, snapshotStmt, BACKFILL_MIN_ROWS } from "../lib/prices.js";
 import { nowIso } from "../lib/time.js";
 import { refreshFundamentals } from "./weekly.js";
+import { fillCallPricesStmts } from "../routes/tech.js";
 
 export const CRON_KR = "0 7 * * 1-5";
 export const CRON_US = "0 22 * * 1-5";
@@ -66,6 +67,8 @@ export async function runDaily(env, which, now = new Date()) {
   // 스냅샷 날짜: 두 크론 모두 UTC 날짜 = 그 거래일의 KST 날짜 (07 UTC = 16 KST 같은 날, 22 UTC = 익일 07 KST이므로 전날)
   const date = now.toISOString().slice(0, 10);
   const snap = await snapshotStmt(env, date, which === "kr" ? "KR" : "ALL").run();
+  // 판정 기록의 1주·1개월 뒤 가격 (계기판 자체 평가용, SPEC §5.6.5). 쿼리 2개.
+  const filled = await env.DB.batch(fillCallPricesStmts(env));
 
   // 국내 재무 이력 보강 (한 종목). 실패해도 시세·스냅샷 결과는 그대로 남긴다.
   let dart = null;
@@ -87,6 +90,7 @@ export async function runDaily(env, which, now = new Date()) {
   const report = {
     at: nowIso(now), which, date,
     updated: a.ok, backfilled: b.ok, snapshots: snap.meta.changes, dart,
+    tech_filled: filled.reduce((s, r) => s + (r.meta?.changes || 0), 0),
     errors: a.errors.concat(b.errors, dartErrors),
     truncated: truncated ? daily.length - MAX_DAILY : 0,
   };
