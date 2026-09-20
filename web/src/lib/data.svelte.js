@@ -8,6 +8,7 @@ export const data = $state({
   cash: [],
   quotes: {},
   fx: null,
+  quoteFrom: null, // 한 번에 받은 시세 중 가장 이른 체결 시각
   quoteAt: null, // 가장 최근 체결 시각 (야후)
   fetchedAt: null, // 우리가 받아온 시각
   loading: false,
@@ -68,6 +69,7 @@ export async function refreshQuotes(extra = []) {
     data.quotes = { ...data.quotes, ...q.quotes };
     if (q.fx && q.fx.USDKRW) data.fx = q.fx.USDKRW;
     const times = Object.values(q.quotes).map((x) => x.time).filter(Boolean).sort();
+    data.quoteFrom = times.length ? times[0] : q.at;
     data.quoteAt = times.length ? times[times.length - 1] : q.at;
     data.fetchedAt = q.at;
     data.quoteErrors = q.errors || [];

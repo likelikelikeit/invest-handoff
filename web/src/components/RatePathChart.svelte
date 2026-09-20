@@ -1,5 +1,5 @@
 <script>
-  // 금리 경로 그래프 (SPEC §5.8): 미국 기준금리(계단) · 2년물(시장 기대 대용치) · 한국 기준금리(계단) · Fed 점도표 중간값(점선).
+  // 금리 경로 그래프 (SPEC §5.8): Fed 목표범위 중간값(계단) · 2년물(시장 기대 대용치) · 한국 기준금리(계단) · Fed 점도표 중간값(점선).
   // 연방기금 선물은 무료 소스가 없어 2년물로 대신한다. 스크러빙하면 그 날짜의 값들이 위에 나온다.
   import { onMount } from "svelte";
   import { createChart, LineSeries, ColorType, CrosshairMode, LineStyle, LineType } from "lightweight-charts";
@@ -66,12 +66,12 @@
 <div class="readout num">
   {#if hover}
     <b>{hover.date}</b>
-    {#if hover.fed != null}<span>미국 기준 {f(hover.fed)}</span>{/if}
+    {#if hover.fed != null}<span>미국 목표 중간 {f(hover.fed)}</span>{/if}
     {#if hover.two != null}<span>미국 2년 {f(hover.two)}</span>{/if}
     {#if hover.bok != null}<span>한국 기준 {f(hover.bok)}</span>{/if}
     {#if hover.dots != null}<span>점도표 {f(hover.dots)}</span>{/if}
   {:else}
-    <span class="legend"><i class="fed"></i>미국 기준금리</span>
+    <span class="legend"><i class="fed"></i>미국 목표범위 중간값</span>
     <span class="legend"><i class="two"></i>미국 2년물(시장 기대 대용)</span>
     <span class="legend"><i class="bok"></i>한국 기준금리</span>
     {#if path.dots.length}<span class="legend"><i class="dots"></i>점도표 중간값</span>{/if}

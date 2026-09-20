@@ -1,8 +1,9 @@
 <script>
   // 홈 블록 5 (SPEC §4.2): 한·미 기준금리와 금리 경로 그래프.
+  // 미국 정책금리는 FOMC 목표범위, EFFR은 상세 화면의 별도 지표로 표시한다.
   import { api } from "../lib/api.js";
   import { data } from "../lib/data.svelte.js";
-  import { latestWithChange } from "../lib/calc/calendar.js";
+  import { latestFedTarget, latestWithChange } from "../lib/calc/calendar.js";
 
   let { detail = false } = $props();
   let macro = $state(null);
@@ -24,8 +25,13 @@
     return () => window.removeEventListener("macro-changed", f);
   });
 
-  const ROWS = [["FEDFUNDS", "미국 기준금리"], ["BOK_BASE", "한국 기준금리"], ["DGS2", "미국 2년물"], ["DGS10", "미국 10년물"]];
-  const hasData = $derived(macro && ROWS.some(([k]) => macro.series[k]?.points.length));
+  const ROWS = [["BOK_BASE", "한국 기준금리"], ["DGS2", "미국 2년물"], ["DGS10", "미국 10년물"]];
+  const fedTarget = $derived(latestFedTarget(macro?.series));
+  const effr = $derived(latestWithChange(macro?.series?.FEDFUNDS?.points));
+  const hasData = $derived(macro && (fedTarget || ROWS.some(([k]) => macro.series[k]?.points.length) || (detail && effr)));
+  const direction = (row) => row?.prev && row.value !== row.prev.value
+    ? { up: row.value > row.prev.value, amount: Math.abs(row.value - row.prev.value) }
+    : null;
 </script>
 
 {#if err}
@@ -34,6 +40,13 @@
   <p class="note">거시 데이터 없음. FRED·ECOS 키를 넣으면 매일 08:30에 채워집니다{macro.cron?.errors?.length ? " (마지막 시도: " + macro.cron.errors[0] + ")" : ""}.</p>
 {:else if macro}
   <dl class="now num">
+    <div>
+      <dt>미국 기준금리 <small>목표범위</small></dt>
+      <dd>{fedTarget ? fedTarget.lower.toFixed(2) + "–" + fedTarget.upper.toFixed(2) + "%" : "—"}
+        {#if direction(fedTarget)}{@const d = direction(fedTarget)}<em class={d.up ? "up" : "down"}>{d.up ? "▲" : "▼"} {d.amount.toFixed(2)}%p</em>{/if}
+      </dd>
+      {#if fedTarget}<span class="d">{fedTarget.date} 기준</span>{/if}
+    </div>
     {#each ROWS as [k, label] (k)}
       {@const l = latestWithChange(macro.series[k]?.points)}
       <div>
@@ -44,6 +57,15 @@
         {#if l}<span class="d">{l.date} 기준</span>{/if}
       </div>
     {/each}
+    {#if detail}
+      <div class="secondary">
+        <dt>실효 연방기금금리 <small>EFFR</small></dt>
+        <dd>{effr ? effr.value.toFixed(2) + "%" : "—"}
+          {#if direction(effr)}{@const d = direction(effr)}<em class={d.up ? "up" : "down"}>{d.up ? "▲" : "▼"} {d.amount.toFixed(2)}%p</em>{/if}
+        </dd>
+        {#if effr}<span class="d">{effr.date} 기준 · 월평균</span>{/if}
+      </div>
+    {/if}
   </dl>
   {#await chartModule then { default: RatePathChart }}
     <RatePathChart {macro} height={detail ? 340 : 220} />
@@ -59,9 +81,11 @@
   .now{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;margin-bottom:12px}
   .now div{padding:6px 0}
   .now dt{font-size:12.5px;color:var(--sub2)}
+  .now dt small{font-size:10.5px;font-weight:500;margin-left:4px;color:var(--sub2)}
   .now dd{font-size:18px;font-weight:660;letter-spacing:-.01em}
   .now em{font-style:normal;font-size:12px;font-weight:560;margin-left:6px}
   .d{font-size:11.5px;color:var(--sub2)}
+  .secondary{border-top:1px solid var(--line-soft)}
   .note{font-size:13px;color:var(--sub2);margin-top:8px;word-break:keep-all}
   @media (min-width:900px){ .now{grid-template-columns:repeat(4,1fr)} }
 </style>

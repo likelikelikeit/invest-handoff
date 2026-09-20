@@ -1,11 +1,17 @@
 <script>
   // 접는 블록 (SPEC §4.2, §6.6): 헤더 전체가 클릭 영역, 오른쪽 chevron이 상태. 접힘 상태는 기기에 기억.
+  import { untrack } from "svelte";
   import { store } from "../lib/storage.js";
 
   let { id, title, note = "", defaultOpen = true, children, aside } = $props();
 
-  const key = "invest.section." + id;
-  let open = $state(store.get(key, defaultOpen ? "1" : "0") === "1");
+  // Section의 id와 최초 열림값은 마운트 뒤 바뀌지 않는 계약이다.
+  const initial = untrack(() => {
+    const key = "invest.section." + id;
+    return { key, open: store.get(key, defaultOpen ? "1" : "0") === "1" };
+  });
+  const key = initial.key;
+  let open = $state(initial.open);
 
   function toggle() {
     open = !open;

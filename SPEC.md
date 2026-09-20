@@ -83,7 +83,7 @@
 | 네이버페이 증권 모바일 내부 JSON | 국내 컨센서스(FnGuide), DART 부재 시 재무 폴백 | 없음 | 주 1회 | 비공식. M5a에서 `integration`, `finance/quarter`, `finance/annual` 확인 |
 | DART OpenAPI | 국내 공시, 분기 재무(XBRL) | 무료 API 키 | 주 1회 + 공시 매일 | 이력이 부족한 종목은 일일 크론이 하나씩 보강 |
 | SEC EDGAR XBRL `companyconcept` | 미국 상장사 분기 재무 이력(밴드용 TTM) | 없음. User-Agent에 연락처 필수 | 로컬 스크립트 1회(`scripts/sec-history.mjs`) | 10-Q/10-K 제출사만(20-F 해외 기업·ETF 제외). 최근 분기는 야후가 채움 |
-| FRED | 미국 기준금리, 국채금리(2Y/10Y), CPI 등 | 무료 API 키 | 하루 1회 | |
+| FRED | 미국 연방기금 목표범위, EFFR, 국채금리(2Y/10Y), CPI 등 | 무료 API 키 | 하루 1회 | |
 | 한국은행 ECOS | 한국 기준금리 | 무료 API 키 | 하루 1회 | |
 | Brandfetch Logo API `cdn.brandfetch.io/ticker/{SYM}/...?c={clientId}` | 종목 로고 | 무료 client ID (공개 가능) | `<img>` 핫링크만, 캐시 금지(약관) | 폴백: Parqet(ISIN) → 이니셜 레터마크 |
 | Anthropic API (`claude-sonnet-5`) | 스크린샷 → 보유 종목 JSON | `ANTHROPIC_API_KEY` Worker 시크릿 | 사용자 요청 시 | 이미 worker.js에 구현 |
@@ -303,7 +303,7 @@ CREATE INDEX idx_events_date ON events(date);
 
 -- 거시 시계열.
 CREATE TABLE macro_series (
-  series_id  TEXT PRIMARY KEY,            -- 'FEDFUNDS', 'DGS2', 'DGS10', 'BOK_BASE', 'USDKRW' ...
+  series_id  TEXT PRIMARY KEY,            -- 'FED_TARGET_LOWER', 'FED_TARGET_UPPER', 'FEDFUNDS', 'DGS2', 'DGS10', 'BOK_BASE' ...
   name       TEXT NOT NULL,
   unit       TEXT,
   source     TEXT NOT NULL,               -- 'fred' | 'ecos' | 'yahoo'
@@ -500,7 +500,7 @@ CREATE TABLE meta (
 
 ### 5.8 거시
 - 시장 띠: `^KS11`, `^GSPC`, `KRW=X`, `^TNX`(미10년) — 야후로 받아 `prices`에 저장(securities에 지수 등록).
-- 기준금리: 미국 `FEDFUNDS`(FRED), 한국 기준금리(ECOS).
+- 기준금리: 미국은 FOMC 연방기금 목표범위 `DFEDTARL`·`DFEDTARU`(FRED), 한국은 한국은행 기준금리(ECOS). `FEDFUNDS`는 월평균 실효 연방기금금리(EFFR)로 별도 표시한다.
 - **금리 경로 그래프**: 시장 기대 경로(연방기금 선물)는 무료 소스 없음. **미국 2년물(`DGS2`)을 시장 기대의 대용치로 그리고, Fed 점도표 중간값은 분기마다 수동 입력** [확정된 방향]. `macro_series`에 `FED_DOTS_YYYYMM` 같은 시리즈로 넣는다 [제안].
 
 ### 5.9 종목 검색
@@ -672,7 +672,9 @@ CREATE TABLE meta (
 - **일정 시드**(`0005`): FOMC 2026·2027, 금통위 2026, CPI·고용 2026년 남은 발표를 공식 페이지에서 확인해 넣었다. 시각은 **KST로 손 계산**(서머타임 반영, 크론 코드가 아니라 데이터). 현지 시각은 `detail.local`. 다음 해 일정은 연초에 새 마이그레이션으로. D1은 `UNION ALL` 항 수 제한이 낮아 시드도 `json_each`로 넣는다(테스트용 node:sqlite는 한도가 달라 통과하므로 마이그레이션은 로컬 D1에도 적용해 본다).
 - **어닝일 교체**: 발표일이 바뀌면 같은 종목의 오늘 이후 야후 어닝일 중 옛 날짜를 지운다(주간 크론도 동일). 직접 넣은(manual) 일정만 앱에서 지울 수 있다.
 - **어닝일 없는 종목**: ETF처럼 Yahoo `quoteSummary`가 404를 반환하는 미국 종목은 어닝일 수집 대상에서 조용히 건너뛴다. 404 이외의 실패는 크론 보고서의 오류에 남긴다.
-- **거시 시리즈**: FEDFUNDS(월별 실효 연방기금금리)·DGS2·DGS10(FRED), 한국 기준금리 ECOS `722Y001/M/0101000`(월별). 점도표는 `FED_DOTS_YYYYMM` 시리즈에 연말 날짜로, 장기(Longer run)는 `9999-12-31`로 저장해 그래프에는 그리지 않고 숫자로만. 입력은 더보기 → 거시.
+- **거시 시리즈**: 미국 정책금리는 `DFEDTARL`·`DFEDTARU`(FRED)의 목표범위로 표시하고 그래프에는 범위 중간값을 쓴다. `FEDFUNDS`(월평균 EFFR)는 상세 화면에 별도 표시한다. DGS2·DGS10(FRED), 한국 기준금리 ECOS `722Y001/M/0101000`(월별). 점도표는 `FED_DOTS_YYYYMM` 시리즈에 연말 날짜로, 장기(Longer run)는 `9999-12-31`로 저장해 그래프에는 그리지 않고 숫자로만. 입력은 더보기 → 거시.
+- **짧은 밸류에이션 이력 표시**(2026-09-20): 3년 미만 데이터에서 비활성 `3년`이 선택된 것처럼 보이지 않게 기간 토글 대신 `가용 이력 전체`를 표시한다. 3년 이상부터 기존 3년/5년/10년 토글을 쓴다.
+- **혼합 시장 시세 시각**(2026-09-20): 한국·미국 종목처럼 마지막 체결 시각이 섞인 목록의 상단에는 가장 최신 시각 하나를 전체 기준처럼 쓰지 않고, 한 번에 받은 시세의 가장 이른 시각–가장 늦은 시각 범위를 표시한다. 개별 종목 상세에는 해당 종목 시각을 계속 표시한다.
 - 홈 블록 4(30일 일정)·5(한·미 기준금리 + 금리 경로)는 §4.2 제안대로 기본 접힘. 접혀 있으면 차트 코드를 불러오지 않는다.
 - 모든 차트에 `lockVisibleTimeRangeOnResize`: 컨테이너 폭이 정해지기 전에 맞춘 뒤 커지면 데이터가 오른쪽에 몰리던 문제.
 

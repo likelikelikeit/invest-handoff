@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { addDays, dayLabel, dday, eventTitle, groupByMonth, latestWithChange, ratePath } from "./calendar.js";
+import { addDays, dayLabel, dday, eventTitle, fedTargetRanges, groupByMonth, latestFedTarget, latestWithChange, ratePath } from "./calendar.js";
 
 describe("일정 표시", () => {
   it("날짜 계산과 표기", () => {
@@ -27,12 +27,32 @@ describe("거시", () => {
       .toEqual({ date: "2026-09-01", value: 2.5, prev: { date: "2026-07-01", value: 2.75 } });
     expect(latestWithChange([])).toBeNull();
   });
-  it("금리 경로: 점도표는 마지막 기준금리에서 시작해 연말 중간값으로", () => {
+  it("Fed 목표범위: 하단·상단을 합치고 직전 범위와 비교", () => {
+    const series = {
+      FED_TARGET_LOWER: { points: [["2026-07-01", 3.5], ["2026-09-17", 3.75]] },
+      FED_TARGET_UPPER: { points: [["2026-07-01", 3.75], ["2026-09-17", 4.0]] },
+    };
+    expect(fedTargetRanges(series)).toEqual([
+      { date: "2026-07-01", lower: 3.5, upper: 3.75, value: 3.625 },
+      { date: "2026-09-17", lower: 3.75, upper: 4, value: 3.875 },
+    ]);
+    expect(latestFedTarget(series)).toEqual({
+      date: "2026-09-17", lower: 3.75, upper: 4, value: 3.875,
+      prev: { date: "2026-07-01", lower: 3.5, upper: 3.75, value: 3.625 },
+    });
+    expect(latestFedTarget({})).toBeNull();
+  });
+  it("금리 경로: 점도표는 마지막 Fed 목표범위 중간값에서 시작", () => {
     const p = ratePath({
-      series: { FEDFUNDS: { points: [["2026-08-01", 3.88]] }, DGS2: { points: [["2026-09-18", 3.58]] } },
+      series: {
+        FED_TARGET_LOWER: { points: [["2026-09-17", 3.75]] },
+        FED_TARGET_UPPER: { points: [["2026-09-17", 4.0]] },
+        DGS2: { points: [["2026-09-18", 3.58]] },
+      },
       dots: { points: [["2026-12-31", 3.625], ["2027-12-31", 3.375]] },
     });
-    expect(p.dots).toEqual([{ time: "2026-08-01", value: 3.88 }, { time: "2026-12-31", value: 3.625 }, { time: "2027-12-31", value: 3.375 }]);
+    expect(p.fed).toEqual([{ time: "2026-09-17", value: 3.875 }]);
+    expect(p.dots).toEqual([{ time: "2026-09-17", value: 3.875 }, { time: "2026-12-31", value: 3.625 }, { time: "2027-12-31", value: 3.375 }]);
     expect(p.two).toHaveLength(1);
     expect(ratePath({ series: {} }).dots).toEqual([]);
   });

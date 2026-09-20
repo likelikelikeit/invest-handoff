@@ -14,7 +14,11 @@ vi.mock("../src/sources/fred.js", async (orig) => ({
   ...(await orig()),
   fredSeries: async (key, id) => {
     if (fake.fredFail) throw new Error("FRED_API_KEY가 없습니다");
-    return [{ date: "2026-09-17", value: id === "DGS2" ? 3.61 : 4.1 }, { date: "2026-09-18", value: id === "DGS2" ? 3.58 : 4.12 }];
+    const values = id === "DGS2" ? [3.61, 3.58]
+      : id === "DFEDTARL" ? [3.5, 3.75]
+      : id === "DFEDTARU" ? [3.75, 4.0]
+      : [4.1, 4.12];
+    return [{ date: "2026-09-17", value: values[0] }, { date: "2026-09-18", value: values[1] }];
   },
 }));
 vi.mock("../src/sources/ecos.js", async (orig) => ({
@@ -56,8 +60,8 @@ describe("일정·거시 (실제 SQLite)", () => {
     env.DB.raw.exec("INSERT INTO positions VALUES (5, 1, 1, 'KRW', 'manual', '" + at + "')");
   });
 
-  it("0005 시드: 시리즈 4개, 일정 30개, 다시 돌려도 중복 없음", () => {
-    expect(env.DB.raw.prepare("SELECT COUNT(*) n FROM macro_series").get().n).toBe(4);
+  it("거시 시드: 시리즈 6개, 일정 30개, 0005를 다시 돌려도 중복 없음", () => {
+    expect(env.DB.raw.prepare("SELECT COUNT(*) n FROM macro_series").get().n).toBe(6);
     expect(env.DB.raw.prepare("SELECT COUNT(*) n FROM events WHERE kind = 'macro'").get().n).toBe(30);
     const sql = require("node:fs").readFileSync(new URL("../migrations/0005_macro_calendar.sql", import.meta.url), "utf8");
     env.DB.raw.exec(sql);
@@ -82,7 +86,10 @@ describe("일정·거시 (실제 SQLite)", () => {
   it("크론: 거시 저장, 어닝일은 바뀌면 옛 미래 날짜를 지우고 교체", async () => {
     env.DB.raw.exec("INSERT INTO events (date, kind, security_id, title, source, created_at) VALUES ('2026-11-10','earnings',5,'실적 발표 예정','yahoo','x')");
     const rep = await runMisc(env, new Date("2026-09-19T23:30:00Z"));
-    expect(rep.macro).toEqual({ BOK_BASE: 2, DGS10: 2, DGS2: 2, FEDFUNDS: 2 });
+    expect(rep.macro).toEqual({
+      BOK_BASE: 2, DGS10: 2, DGS2: 2, FEDFUNDS: 2,
+      FED_TARGET_LOWER: 2, FED_TARGET_UPPER: 2,
+    });
     expect(rep.earnings).toBe(1);
     const earn = env.DB.raw.prepare("SELECT date FROM events WHERE kind='earnings' ORDER BY date").all().map((r) => r.date);
     expect(earn).toEqual(["2026-11-17"]);
@@ -95,7 +102,7 @@ describe("일정·거시 (실제 SQLite)", () => {
     fake.fredFail = true;
     const rep = await runMisc(env, new Date("2026-09-19T23:30:00Z"));
     expect(rep.macro.BOK_BASE).toBe(2);
-    expect(rep.errors.filter((e) => e.includes("FRED_API_KEY"))).toHaveLength(3);
+    expect(rep.errors.filter((e) => e.includes("FRED_API_KEY"))).toHaveLength(5);
   });
 
   it("어닝일이 없는 ETF의 Yahoo 404는 조용히 건너뛴다", async () => {

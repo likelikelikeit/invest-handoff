@@ -1,4 +1,4 @@
-// FRED (세인트루이스 연준) 어댑터. 무료 키(FRED_API_KEY). 미국 기준금리·국채금리.
+// FRED (세인트루이스 연준) 어댑터. 무료 키(FRED_API_KEY). Fed 목표범위·EFFR·국채금리.
 // https://fred.stlouisfed.org/docs/api/fred/series_observations.html
 
 const API = "https://api.stlouisfed.org/fred/series/observations";

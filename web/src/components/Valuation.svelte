@@ -45,7 +45,9 @@
   const availableMetrics = $derived(new Set(VALUATION_METRICS.filter((m) => baseValue(latest, m.key) > 0 && dailyMultiples(prices, ttm, m.key).length).map((m) => m.key)));
   const defaultBands = $derived(suggestedMultiples(allSeries).length === 5 ? suggestedMultiples(allSeries) : fallbackMultiples(allSeries));
   const multiples = $derived(normalizeMultiples(bands[metric] || defaultBands));
-  const shown = $derived(sliceYears(allSeries, range));
+  // 선택 기간만큼 이력이 없으면 비활성 3년을 선택한 것처럼 보이지 않게 가용 이력 전체를 쓴다.
+  const effectiveRange = $derived(hasYears(Number(range.slice(0, -1))) ? range : null);
+  const shown = $derived(sliceYears(allSeries, effectiveRange));
   const consensusValue = $derived(latestConsensusValue(payload?.estimates || [], metric, latest));
   const currentDraft = $derived(draft(activeScenario));
   const baseDraft = $derived(draft("base"));
@@ -70,6 +72,7 @@
   }
   function sliceYears(rows, key) {
     if (!rows.length) return [];
+    if (!key) return rows;
     const years = Number(key.slice(0, -1));
     const end = Date.parse(rows.at(-1).date);
     const start = end - years * 365.25 * 86400000;
@@ -233,13 +236,17 @@
   {consensusValue} fmt={priceFmt} valueFmt={money} horizonYears={baseDraft?.horizon_years || 1} />
 
 <div class="range-settings">
-  <div class="ranges" role="radiogroup" aria-label="밸류에이션 기간">
-    {#each [[3,"3년"],[5,"5년"],[10,"10년"]] as r (r[0])}
-      <button role="radio" aria-checked={range === r[0] + "y"} class:active={range === r[0] + "y"}
-        disabled={!hasYears(r[0])} onclick={() => range = r[0] + "y"}>{r[1]}</button>
-    {/each}
-  </div>
-  <span>{allSeries.length ? `${allSeries[0].date}부터 ${allSeries.length.toLocaleString("ko-KR")}일` : "계산 가능한 이력 없음"}</span>
+  {#if hasYears(3)}
+    <div class="ranges" role="radiogroup" aria-label="밸류에이션 기간">
+      {#each [[3,"3년"],[5,"5년"],[10,"10년"]] as r (r[0])}
+        <button role="radio" aria-checked={effectiveRange === r[0] + "y"} class:active={effectiveRange === r[0] + "y"}
+          disabled={!hasYears(r[0])} onclick={() => range = r[0] + "y"}>{r[1]}</button>
+      {/each}
+    </div>
+  {:else if allSeries.length}
+    <span class="available">가용 이력 전체</span>
+  {/if}
+  <span>{allSeries.length ? `${shown[0].date}부터 ${shown.length.toLocaleString("ko-KR")}일` : "계산 가능한 이력 없음"}</span>
 </div>
 
 {#if allSeries.length}
@@ -317,6 +324,7 @@
   .modes button.active,.ranges button.active,.scenario-tabs button.active,.years button.active{background:var(--bg);color:var(--ink);font-weight:650;box-shadow:0 1px 4px rgba(0,0,0,.08)}
   .ranges button:disabled{opacity:.3;cursor:default}
   .range-settings{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px}.range-settings>span{font-size:11.5px;color:var(--sub2)}
+  .range-settings .available{padding:8px 11px;border-radius:8px;background:var(--bg2);color:var(--sub);font-weight:600}
   .band-editor{margin-top:20px;padding-top:16px;border-top:1px solid var(--line-soft)}
   .band-head{display:flex;align-items:baseline;gap:9px}.band-head strong{font-size:14px}.band-head span{font-size:11.5px;color:var(--sub2)}
   .band-inputs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:9px}

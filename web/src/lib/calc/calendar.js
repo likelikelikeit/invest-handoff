@@ -58,12 +58,54 @@ export function latestWithChange(points) {
 }
 
 /**
- * 금리 경로 (SPEC §5.8): 미국 기준금리 이력 + 2년물(시장 기대 대용치) + 점도표 중간값(연말 점).
- * 점도표는 마지막 기준금리 날짜에서 시작해 연말 중간값으로 잇는다.
+ * Fed 목표범위 하단·상단을 날짜별로 합친다.
+ * 두 시리즈의 갱신일이 잠시 어긋나도 마지막 관측값을 이어서 쓴다.
+ */
+export function fedTargetRanges(series) {
+  const events = new Map();
+  for (const [date, value] of series?.FED_TARGET_LOWER?.points || []) {
+    events.set(date, { ...(events.get(date) || {}), lower: value });
+  }
+  for (const [date, value] of series?.FED_TARGET_UPPER?.points || []) {
+    events.set(date, { ...(events.get(date) || {}), upper: value });
+  }
+  let lower = null;
+  let upper = null;
+  const out = [];
+  for (const date of [...events.keys()].sort()) {
+    const event = events.get(date);
+    if (Number.isFinite(event.lower)) lower = event.lower;
+    if (Number.isFinite(event.upper)) upper = event.upper;
+    if (Number.isFinite(lower) && Number.isFinite(upper)) {
+      out.push({ date, lower, upper, value: (lower + upper) / 2 });
+    }
+  }
+  return out;
+}
+
+/** 최신 Fed 목표범위와 직전의 다른 목표범위. value는 차트용 중간값이다. */
+export function latestFedTarget(series) {
+  const ranges = fedTargetRanges(series);
+  if (!ranges.length) return null;
+  const last = ranges.at(-1);
+  let prev = null;
+  for (let i = ranges.length - 2; i >= 0; i--) {
+    const row = ranges[i];
+    if (row.lower !== last.lower || row.upper !== last.upper) {
+      prev = row;
+      break;
+    }
+  }
+  return { ...last, prev };
+}
+
+/**
+ * 금리 경로 (SPEC §5.8): Fed 목표범위 중간값 + 2년물(시장 기대 대용치) + 점도표 중간값(연말 점).
+ * 점도표는 마지막 목표범위 날짜에서 시작해 연말 중간값으로 잇는다.
  */
 export function ratePath(macro) {
   const s = macro?.series || {};
-  const fed = s.FEDFUNDS?.points || [];
+  const fed = fedTargetRanges(s).map(({ date, value }) => [date, value]);
   const dots = macro?.dots?.points || [];
   const start = fed.length ? { time: fed[fed.length - 1][0], value: fed[fed.length - 1][1] } : null;
   return {

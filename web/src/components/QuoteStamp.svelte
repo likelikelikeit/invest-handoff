@@ -10,6 +10,12 @@
     await refreshQuotes();
     busy = false;
   }
+
+  const quoteRange = $derived.by(() => {
+    const from = stamp(data.quoteFrom);
+    const to = stamp(data.quoteAt);
+    return from && to && from !== to ? from + "–" + to : to;
+  });
 </script>
 
 <div class="stamp">
@@ -17,7 +23,7 @@
     {#if data.offline}
       오프라인 · {data.cachedAt ? stamp(data.cachedAt) : data.quoteAt ? stamp(data.quoteAt) : "마지막 저장 데이터"} 기준
     {:else if data.quoteAt}
-      시세 {stamp(data.quoteAt)} 기준 · 야후 지연{#if data.fx} · 달러 {data.fx.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원{/if}
+      시세 {data.quoteFrom && data.quoteFrom !== data.quoteAt ? "종목별 " : ""}{quoteRange} 기준 · 야후 지연{#if data.fx} · 달러 {data.fx.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}원{/if}
     {:else if data.loaded}
       시세 데이터 없음 · 평단으로 표시
     {/if}
