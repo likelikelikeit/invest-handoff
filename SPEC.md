@@ -117,6 +117,10 @@ CREATE TABLE securities (
   isin          TEXT,
   market        TEXT NOT NULL,            -- 'KR' | 'US'
   currency      TEXT NOT NULL,            -- 'KRW' | 'USD'
+  financial_currency TEXT,                -- 원천 재무 통화. 상장 통화와 다르면 환산 전 계산 금지
+  adr_ratio     REAL,                     -- ADR 1주가 나타내는 원주 수(일반주는 1)
+  financial_to_listing_rate REAL,         -- 원천 재무 통화 → 상장 통화 환산율
+  financial_rate_as_of TEXT,              -- 환산율 기준일
   sector        TEXT,                     -- 반도체·AI, 헬스케어 ... (자유 텍스트, 팔레트 키)
   logo_url      TEXT,                     -- 수동 지정 시. 없으면 Brandfetch 규칙으로 생성
   brand_color   TEXT,                     -- '#RRGGBB'. 로고에서 추출하거나 수동
@@ -219,6 +223,11 @@ CREATE TABLE financials (
   ebitda           REAL,
   net_debt         REAL,
   shares_out       REAL,
+  currency         TEXT,                  -- 계산에 쓰는 정규화 통화. 상장 통화와 같을 때만 밸류에이션 가능
+  source_currency  TEXT,                  -- 원천 제공 통화
+  adr_ratio        REAL,                  -- 이 행에 적용된 ADR 비율
+  fx_rate          REAL,                  -- 손익·EPS에 적용한 분기 평균 원천→상장 통화 환산율
+  balance_fx_rate  REAL,                  -- BPS·순부채에 적용한 분기말 원천→상장 통화 환산율
   raw              TEXT,                  -- JSON 원문
   source           TEXT NOT NULL,         -- 'dart' | 'yahoo' | 'naver'(DART 키 없을 때 국내 폴백) | 'sec'(미국 과거 이력)
   fetched_at       TEXT NOT NULL,
@@ -643,6 +652,11 @@ CREATE TABLE meta (
   - **국내(DART)**: 사업보고서는 연간 누적뿐이라 4분기 행이 없어 TTM이 생기지 않던 버그를 고쳤다. 4분기 = 연간 − (1·2·3분기)로 파생(손익 흐름 항목, EPS는 근사). 보유 국내 4종목 고유번호를 채웠다(공개 DART 회사 검색). 일일 크론이 DART 분기 12개 미만인 종목을 한 번에 하나씩 보강하고, 시도한 종목은 3일 건너뛴다.
   - **미국(SEC EDGAR)**: `companyconcept`(EPS 희석·매출·순이익·영업이익)를 로컬 스크립트로 한 번 넣는다. 4분기는 연간 − 세 분기, 회계일은 가까운 월말로 맞춰 야후 행과 같은 키가 되게 했다. **EPS는 제출일 뒤에 일어난 주식분할만큼 나눠** 오늘(분할 반영 주가) 기준으로 맞춘다(야후 분할 이력). 연락처는 `SEC_USER_AGENT` 환경변수로만(사용자 허락, 코드·저장소에 없음). 해외 20-F 제출사(TSMC·노보)와 ETF는 대상이 아니라 밴드가 짧다.
   - 가격 이력도 10년으로 늘려 10년 토글이 켜지게 했다(`backfill.mjs --all --range 10y`).
+
+밸류에이션 단위 보정 (2026-09-20):
+- **계산 단위가 먼저다.** 재무 원천 통화와 상장 가격 통화, ADR 원주 비율을 `securities`와 `financials`에 명시한다. 재무행의 `currency`가 상장 통화와 같다고 확인된 행만 PER·PBR·EV/EBITDA·PSR와 의견 시점 `per_at`에 쓴다.
+- TSMC ADR은 Yahoo의 합계 재무가 TWD, 가격·컨센서스가 USD 기준이다. EPS·BPS·희석주식 수는 이미 ADR-equivalent(1 ADR=보통주 5주)이므로 ADR 비율을 다시 곱하지 않는다. 손익·EPS는 분기 평균환율, BPS·순부채는 분기말 환율로 바꾸며, 환산 전에는 틀린 배수·기본 가정을 보여주지 않고 화면과 MCP에 **환산 필요**를 명시한다. NVO도 같은 원칙으로 DKK→USD를 처리하고 1 ADR=보통주 1주를 기록한다. 원문 숫자는 감사용으로 보존한다.
+- DART 16개 보고서를 한 Worker 호출에서 모두 받지 않는다. 국내 일일 크론이 종목별 커서를 두고 한 사업연도(최대 4요청)씩 이어받아 무료 플랜 50 서브요청 한도를 지킨다. 같은 기간은 DART의 non-null 값을 우선하고, DART에 없는 BPS·EBITDA·주식 수는 네이버 값으로 보완하며 새 null이 기존 값을 지우지 않는다.
 
 마일스톤 6에서 정한 것 (2026-09-19):
 - 지표 계산은 **Worker의 순수 함수**(`worker/src/lib/tech.js`)가 한다. 판정 API·기록·크론이 같은 코드를 쓴다. 볼린저 σ는 모표준편차, RSI는 Wilder 평활(첫 평균은 단순 평균).

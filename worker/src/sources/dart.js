@@ -98,10 +98,19 @@ async function statement(apiKey, corpCode, report) {
 }
 
 /** TTM 3년 밴드를 만들 수 있도록 최근 공시 16개를 받는다. 없는 분기는 건너뛴다. */
-export async function dartFundamentals(apiKey, corpCode, now = new Date()) {
+export async function dartFundamentals(apiKey, corpCode, now = new Date(), {
+  offset = 0, count = 16, batchByYear = false,
+} = {}) {
   if (!apiKey) throw new Error("DART_API_KEY가 없습니다");
   if (!/^\d{8}$/.test(String(corpCode || ""))) throw new Error("DART 회사 고유번호가 없습니다");
-  const settled = await Promise.allSettled(recentDartReports(now).map((r) => statement(apiKey, corpCode, r)));
+  const reports = recentDartReports(now);
+  const start = Math.max(0, Number(offset) || 0);
+  const limit = Math.max(1, Number(count) || 1);
+  const remaining = reports.slice(start);
+  const selected = batchByYear && remaining.length
+    ? remaining.filter((r) => r.year === remaining[0].year).slice(0, limit)
+    : remaining.slice(0, limit);
+  const settled = await Promise.allSettled(selected.map((r) => statement(apiKey, corpCode, r)));
   const financials = [];
   const errors = [];
   for (const r of settled) {
@@ -109,5 +118,11 @@ export async function dartFundamentals(apiKey, corpCode, now = new Date()) {
     else if (r.status === "rejected") errors.push(String(r.reason?.message || r.reason));
   }
   if (!financials.length && errors.length) throw new Error(errors[0]);
-  return { financials: financials.concat(deriveQ4(financials)), estimates: [], earningsDate: null, errors };
+  // 일부 보고서만 실패했다면 성공분은 저장하되 커서를 넘기지 않는다. 다음 시도에서 같은 묶음을
+  // 다시 받아 누락된 기간을 건너뛰지 않게 한다(UPSERT라 성공분 재수집은 무해하다).
+  const nextOffset = errors.length ? start : Math.min(start + selected.length, reports.length);
+  return {
+    financials: financials.concat(deriveQ4(financials)), estimates: [], earningsDate: null, errors,
+    progress: { offset: start, nextOffset, total: reports.length, done: !errors.length && nextOffset >= reports.length },
+  };
 }

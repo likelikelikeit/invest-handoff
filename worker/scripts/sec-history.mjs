@@ -49,7 +49,7 @@ async function sec(url) {
 }
 
 const secs = d1(
-  "SELECT s.id, s.ticker, (SELECT COUNT(*) FROM financials f WHERE f.security_id = s.id AND f.period_type = 'Q') AS n " +
+  "SELECT s.id, s.ticker, s.currency, (SELECT COUNT(*) FROM financials f WHERE f.security_id = s.id AND f.period_type = 'Q') AS n " +
   "FROM securities s WHERE s.archived_at IS NULL AND s.market = 'US' AND s.asset_class = 'equity' " +
   "AND (s.id IN (SELECT security_id FROM positions) OR s.id IN (SELECT security_id FROM watchlist)) ORDER BY s.id"
 );
@@ -83,12 +83,14 @@ for (const s of secs) {
   if (!rows.length) { console.log("  " + s.ticker + " 건너뜀: 분기 EPS 없음(20-F 해외 기업 등)"); continue; }
   const packed = JSON.stringify(rows.map((r) => [r.period_end, r.revenue, r.operating_income, r.net_income, r.eps]));
   lines.push(
-    "INSERT INTO financials (security_id, period_end, period_type, revenue, operating_income, net_income, eps, source, fetched_at) " +
+    "INSERT INTO financials (security_id, period_end, period_type, revenue, operating_income, net_income, eps, source, fetched_at, currency, source_currency, adr_ratio, fx_rate, balance_fx_rate) " +
     "SELECT " + s.id + ", json_extract(value,'$[0]'), 'Q', json_extract(value,'$[1]'), json_extract(value,'$[2]'), " +
-    "json_extract(value,'$[3]'), json_extract(value,'$[4]'), 'sec', " + q(new Date().toISOString()) +
+    "json_extract(value,'$[3]'), json_extract(value,'$[4]'), 'sec', " + q(new Date().toISOString()) + ", " +
+    q(s.currency) + ", " + q(s.currency) + ", 1, 1, 1" +
     " FROM json_each(" + q(packed) + ") WHERE true ON CONFLICT(security_id, period_end, period_type) DO UPDATE SET " +
     "revenue = excluded.revenue, operating_income = excluded.operating_income, net_income = excluded.net_income, eps = excluded.eps, " +
-    "fetched_at = excluded.fetched_at WHERE financials.source = 'sec';"
+    "fetched_at = excluded.fetched_at, currency = excluded.currency, source_currency = excluded.source_currency, " +
+    "adr_ratio = excluded.adr_ratio, fx_rate = excluded.fx_rate, balance_fx_rate = excluded.balance_fx_rate WHERE financials.source = 'sec';"
   );
   total += rows.length;
   console.log("  " + s.ticker + " " + rows.length + "분기 (" + rows[0].period_end + " ~ " + rows[rows.length - 1].period_end + ")" +

@@ -54,11 +54,19 @@ describe("종목 시나리오 (실제 SQLite)", () => {
 
   it("최근 네 분기 EPS로 의견 시점 PER를 계산한다", async () => {
     for (const [date, eps] of [["2025-12-31", 1], ["2026-03-31", 2], ["2026-06-30", 3], ["2026-09-30", 4]]) {
-      env.DB.raw.prepare("INSERT INTO financials (security_id,period_end,period_type,eps,source,fetched_at) VALUES (?,?,?,?,?,?)")
-        .run(5, date, "Q", eps, "yahoo", "2026-09-19");
+      env.DB.raw.prepare("INSERT INTO financials (security_id,period_end,period_type,eps,source,fetched_at,currency) VALUES (?,?,?,?,?,?,?)")
+        .run(5, date, "Q", eps, "yahoo", "2026-09-19", "USD");
     }
     // 2026-09-30 분기가 끝난 뒤의 날짜로 고정 (실행 날짜에 따라 결과가 바뀌지 않게)
     expect(await perAt(env, 5, 200, "2026-10-15")).toBe(20);
     expect(await perAt(env, 5, 200, "2026-09-19")).toBeNull(); // 그날엔 아직 세 분기뿐
+  });
+
+  it("재무 통화가 상장 통화로 정규화되지 않으면 PER 스냅샷을 만들지 않는다", async () => {
+    for (const [date, eps] of [["2025-12-31", 10], ["2026-03-31", 11], ["2026-06-30", 12], ["2026-09-30", 13]]) {
+      env.DB.raw.prepare("INSERT INTO financials (security_id,period_end,period_type,eps,source,fetched_at,currency,source_currency,adr_ratio) VALUES (?,?,?,?,?,?,?,?,?)")
+        .run(5, date, "Q", eps, "yahoo", "2026-09-19", null, "TWD", 5);
+    }
+    expect(await perAt(env, 5, 200, "2026-10-15")).toBeNull();
   });
 });

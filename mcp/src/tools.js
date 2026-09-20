@@ -181,7 +181,7 @@ async function getCompany(env, args) {
       "WHERE security_id = ?1 AND date >= date('now', '-365 days')"
     ).bind(sec.id),
     env.DB.prepare(
-      "SELECT period_end, period_type, revenue, operating_income, net_income, eps, bps, source FROM financials " +
+      "SELECT period_end, period_type, revenue, operating_income, net_income, eps, bps, source, currency, source_currency, adr_ratio, fx_rate FROM financials " +
       "WHERE security_id = ?1 ORDER BY period_end DESC LIMIT 12"
     ).bind(sec.id),
     env.DB.prepare(
@@ -204,8 +204,13 @@ async function getCompany(env, args) {
 
   const price = last.results[0] || null;
   const prev = last.results[1] || null;
-  const quarters = fin.results.filter((f) => f.period_type === "Q").slice(0, 4);
-  const ttm = quarters.length === 4
+  const latestQuarterRows = fin.results.filter((f) => f.period_type === "Q").slice(0, 4);
+  const hasUnnormalizedFinancials = latestQuarterRows.some((f) => !f.currency || f.currency !== sec.currency);
+  const quarters = fin.results.filter((f) => f.period_type === "Q" && f.currency === sec.currency).slice(0, 4);
+  const quarterSpan = quarters.length === 4
+    ? (Date.parse(quarters[0].period_end) - Date.parse(quarters[3].period_end)) / 86400000
+    : null;
+  const ttm = quarters.length === 4 && quarterSpan >= 240 && quarterSpan <= 300
     ? {
         periods: quarters.map((q) => q.period_end).reverse(),
         revenue: quarters.reduce((a, b) => a + (b.revenue || 0), 0),
@@ -214,13 +219,16 @@ async function getCompany(env, args) {
         eps: quarters.every((q) => q.eps != null) ? round(quarters.reduce((a, b) => a + b.eps, 0), 4) : null,
       }
     : null;
-  const bps = fin.results.find((f) => f.bps != null)?.bps ?? null;
+  const bps = fin.results.find((f) => f.currency === sec.currency && f.bps != null)?.bps ?? null;
   const p = pos.results[0] || null;
   const valueKrw = p && price ? toKrw(p.qty * price.close, sec.currency, fx) : null;
 
   return {
     as_of: nowKst(),
-    security: { ...secOut(sec), ysym: sec.ysym, band_default: sec.band_default, expected_return_pct: sec.expected_return_pct },
+    security: {
+      ...secOut(sec), ysym: sec.ysym, band_default: sec.band_default, expected_return_pct: sec.expected_return_pct,
+      financial_currency: sec.financial_currency || sec.currency, adr_ratio: sec.adr_ratio || 1,
+    },
     price: price
       ? {
           close: price.close, date: price.date, currency: sec.currency,
@@ -245,7 +253,10 @@ async function getCompany(env, args) {
       per_ttm: ttm?.eps && price ? round(price.close / ttm.eps) : null,
       pbr: bps && price ? round(price.close / bps) : null,
       bps,
-      note: "TTM은 최근 4개 분기 합. 분기 데이터가 4개 미만이면 비운다.",
+      ready: !hasUnnormalizedFinancials,
+      note: hasUnnormalizedFinancials
+        ? "재무 통화·ADR 단위가 상장 가격 통화로 환산되지 않아 밸류에이션을 비웠다."
+        : "TTM은 통화 단위가 일치하는 최근 연속 4개 분기 합. 분기 데이터가 부족하면 비운다.",
     },
     financials: fin.results,
     estimates: est.results,

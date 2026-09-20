@@ -91,6 +91,28 @@ describe("get_company_view", () => {
     expect(r.valuation.per_ttm).toBeNull();
     expect(r.position.qty).toBe(100);
   });
+
+  it("ADR 재무가 상장 통화로 환산되지 않았으면 밸류에이션을 비운다", async () => {
+    const at = "2026-09-20T00:00:00+09:00";
+    const tsm = env.DB.raw.prepare(
+      "INSERT INTO securities (name,ticker,ysym,market,currency,financial_currency,adr_ratio,asset_class,created_at,updated_at) " +
+      "VALUES (?,?,?,?,?,?,?,'equity',?,?) RETURNING id"
+    ).get("TSMC ADR", "TSM", "TSM", "US", "USD", "TWD", 5, at, at).id;
+    env.DB.raw.prepare("INSERT INTO prices (security_id,date,close) VALUES (?,?,?)").run(tsm, dayAgo(0), 477.57);
+    const fin = env.DB.raw.prepare(
+      "INSERT INTO financials (security_id,period_end,period_type,eps,bps,source,fetched_at,currency,source_currency,adr_ratio) " +
+      "VALUES (?,?,'Q',?,?,'yahoo',?,NULL,'TWD',5)"
+    );
+    [["2025-09-30",87.2],["2025-12-31",97.5],["2026-03-31",110.4],["2026-06-30",136.25]]
+      .forEach(([date, eps]) => fin.run(tsm, date, eps, 1240, at));
+
+    const r = await run("get_company_view", { ticker: "TSM" });
+    expect(r.ttm).toBeNull();
+    expect(r.valuation.ready).toBe(false);
+    expect(r.valuation.per_ttm).toBeNull();
+    expect(r.valuation.pbr).toBeNull();
+    expect(r.valuation.note).toContain("환산되지 않아");
+  });
 });
 
 describe("get_calendar", () => {

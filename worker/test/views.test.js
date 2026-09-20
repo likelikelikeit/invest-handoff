@@ -31,8 +31,8 @@ describe("views (실제 SQLite)", () => {
   it("기록: 서버가 가격·상승여력·통화·점수를 얼린다", async () => {
     // 끝난 네 분기 (2025-09-30 ~ 2026-06-30). 아직 안 끝난 2026-09-30 추정 행은 섞여 있어도 쓰지 않는다.
     for (const [date, eps] of [["2025-09-30", 2], ["2025-12-31", 2], ["2026-03-31", 3], ["2026-06-30", 3], ["2099-09-30", 100]]) {
-      env.DB.raw.prepare("INSERT INTO financials (security_id,period_end,period_type,eps,source,fetched_at) VALUES (?,?,?,?,?,?)")
-        .run(5, date, "Q", eps, "yahoo", "2026-09-19");
+      env.DB.raw.prepare("INSERT INTO financials (security_id,period_end,period_type,eps,source,fetched_at,currency) VALUES (?,?,?,?,?,?,?)")
+        .run(5, date, "Q", eps, "yahoo", "2026-09-19", "USD");
     }
     const r = await body(await createView(req({ security_id: 5, rating: "매수", target_price: 260, thesis: "  AI 수요\n데이터센터 " }), env, H));
     expect(r.view).toMatchObject({
@@ -46,8 +46,8 @@ describe("views (실제 SQLite)", () => {
 
   it("per_at: 빠진 분기가 있으면 null", async () => {
     for (const [date, eps] of [["2025-06-30", 2], ["2025-12-31", 2], ["2026-03-31", 3], ["2026-06-30", 3]]) {
-      env.DB.raw.prepare("INSERT INTO financials (security_id,period_end,period_type,eps,source,fetched_at) VALUES (?,?,?,?,?,?)")
-        .run(5, date, "Q", eps, "yahoo", "2026-09-19");
+      env.DB.raw.prepare("INSERT INTO financials (security_id,period_end,period_type,eps,source,fetched_at,currency) VALUES (?,?,?,?,?,?,?)")
+        .run(5, date, "Q", eps, "yahoo", "2026-09-19", "USD");
     }
     const r = await body(await createView(req({ security_id: 5, rating: "매수", target_price: 260 }), env, H));
     expect(r.view.per_at).toBeNull();

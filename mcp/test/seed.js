@@ -47,8 +47,8 @@ export function seed() {
 
   // 재무 4개 분기 + 컨센서스
   const fin = db.raw.prepare(
-    "INSERT INTO financials (security_id, period_end, period_type, revenue, operating_income, net_income, eps, bps, source, fetched_at) " +
-    "VALUES (?, ?, 'Q', ?, ?, ?, ?, ?, 'sec', ?)"
+    "INSERT INTO financials (security_id, period_end, period_type, revenue, operating_income, net_income, eps, bps, source, fetched_at, currency) " +
+    "VALUES (?, ?, 'Q', ?, ?, ?, ?, ?, 'sec', ?, 'USD')"
   );
   ["2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30"].forEach((p, i) =>
     fin.run(nvda, p, 1000 + i * 100, 400, 300 + i * 10, 1 + i * 0.1, 20, at));

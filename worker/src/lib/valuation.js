@@ -24,10 +24,14 @@ export function impliedTarget(a) {
  */
 export async function perAt(env, securityId, price, today = new Date().toISOString().slice(0, 10)) {
   const { results } = await env.DB.prepare(
-    "SELECT period_end, eps FROM financials WHERE security_id = ?1 AND period_type = 'Q' AND eps IS NOT NULL " +
-    "AND period_end <= ?2 ORDER BY period_end DESC LIMIT 4"
+    "SELECT f.period_end, f.eps, f.currency, s.currency AS listing_currency FROM financials f " +
+    "JOIN securities s ON s.id = f.security_id WHERE f.security_id = ?1 AND f.period_type = 'Q' AND f.eps IS NOT NULL " +
+    "AND f.period_end <= ?2 ORDER BY f.period_end DESC LIMIT 4"
   ).bind(securityId, today).all();
   if (results.length !== 4) return null;
+  // ADR·이중상장 종목의 원천 재무 통화가 상장 가격 통화로 정규화되지 않았으면
+  // 가격/TTM EPS를 섞지 않는다. 0009 이전·직접 입력 행도 통화가 비면 안전하게 중단한다.
+  if (results.some((row) => !row.currency || row.currency !== row.listing_currency)) return null;
   const span = (Date.parse(results[0].period_end) - Date.parse(results[3].period_end)) / 86400000;
   if (span < 240 || span > 300) return null;
   const eps = results.reduce((sum, row) => sum + Number(row.eps), 0);

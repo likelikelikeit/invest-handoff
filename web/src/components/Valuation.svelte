@@ -23,7 +23,23 @@
   let error = $state("");
   let seeded = false;
 
-  const ttm = $derived(ttmSeries(payload?.financials || []));
+  const valuationBlock = $derived.by(() => {
+    const readiness = payload?.security?.valuation_ready ?? sec?.valuation_ready;
+    if (readiness === true) return null;
+    const sourceCurrency = payload?.security?.financial_currency || sec?.financial_currency;
+    const quoteCurrency = sec?.currency;
+    const adrRatio = Number(payload?.security?.adr_ratio ?? sec?.adr_ratio ?? 1);
+    if (readiness === false || (sourceCurrency && quoteCurrency && sourceCurrency !== quoteCurrency) || adrRatio !== 1) {
+      return {
+        sourceCurrency: sourceCurrency || "원천 통화",
+        quoteCurrency: quoteCurrency || "표시 통화",
+        adrRatio,
+      };
+    }
+    return null;
+  });
+  const normalizedFinancials = $derived((payload?.financials || []).filter((row) => row.currency === sec?.currency));
+  const ttm = $derived(ttmSeries(valuationBlock ? [] : normalizedFinancials));
   const latest = $derived(ttm.at(-1) || null);
   const allSeries = $derived(dailyMultiples(prices, ttm, metric));
   const availableMetrics = $derived(new Set(VALUATION_METRICS.filter((m) => baseValue(latest, m.key) > 0 && dailyMultiples(prices, ttm, m.key).length).map((m) => m.key)));
@@ -186,6 +202,13 @@
 
 {#if error}<p class="msg bad">밸류에이션을 불러오지 못했습니다: {error}</p>{/if}
 
+{#if valuationBlock}
+  <div class="valuation-block" role="status">
+    <strong>통화·주식 단위 환산이 필요합니다</strong>
+    <p>재무는 {valuationBlock.sourceCurrency}, 주가는 {valuationBlock.quoteCurrency} 기준입니다.{valuationBlock.adrRatio !== 1 ? ` ADR 1주는 보통주 ${valuationBlock.adrRatio}주를 나타냅니다.` : ""}</p>
+    <p>시점별 환율과 ADR 비율을 함께 반영하기 전까지 잘못된 배수와 기본 가정을 표시하지 않습니다.</p>
+  </div>
+{:else}
 <div class="topbar">
   <div class="metrics" role="radiogroup" aria-label="밸류에이션 지표">
     {#each VALUATION_METRICS as m (m.key)}
@@ -271,8 +294,12 @@
 {:else}
   <p class="empty">시나리오를 만들 TTM 재무가 부족합니다.</p>
 {/if}
+{/if}
 
 <style>
+  .valuation-block{padding:18px 0 24px;border-bottom:1px solid var(--line-soft)}
+  .valuation-block strong{display:block;font-size:14px;color:var(--ink)}
+  .valuation-block p{margin-top:6px;font-size:12.5px;line-height:1.55;color:var(--sub);word-break:keep-all}
   .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
   .metrics{display:flex;gap:18px;overflow-x:auto;scrollbar-width:none}.metrics::-webkit-scrollbar{display:none}
   .metrics button{position:relative;flex:none;min-height:38px;font-size:13px;color:var(--sub)}

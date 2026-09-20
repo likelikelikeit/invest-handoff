@@ -18,9 +18,10 @@ export const CRON_US = "0 22 * * 1-5";
 
 const MAX_DAILY = 35; // 종목 수가 늘면 여기서 잘린다. 넘으면 meta에 남겨 알 수 있게.
 const BACKFILL_PER_RUN = 2;
-// DART 분기 이력이 이만큼 안 되는 국내 종목은 일일 크론마다 하나씩 보강한다 (DART 요청 16개 + 네이버 3개).
+// DART 분기 이력이 이만큼 안 되는 국내 종목은 일일 크론마다 하나씩, 한 사업연도(최대 4요청)씩 보강한다.
 // 주간 크론은 한 주에 한 종목만 DART를 부르므로, 새로 고유번호를 넣은 종목이 몇 주씩 기다리지 않게.
 export const DART_MIN_QUARTERS = 12;
+export const DART_REPORTS_PER_RUN = 4;
 
 /**
  * DART 고유번호가 있는데 DART 분기 행이 부족한 국내 종목 하나 (보유·관심, 숨김 제외).
@@ -31,6 +32,7 @@ export async function dartBackfillTarget(env, now = new Date()) {
   if (!env.DART_API_KEY) return null;
   return env.DB.prepare(
     "SELECT s.id, s.name, s.ticker, s.ysym, s.market, s.currency, s.dart_corp_code, " +
+    "COALESCE((SELECT CAST(value AS INTEGER) FROM meta WHERE key = 'dart:cursor:' || s.id), 0) AS dart_offset, " +
     "(SELECT COUNT(*) FROM financials f WHERE f.security_id = s.id AND f.source = 'dart' AND f.period_type = 'Q') AS n " +
     "FROM securities s WHERE s.archived_at IS NULL AND s.market = 'KR' AND s.asset_class = 'equity' AND s.dart_corp_code IS NOT NULL " +
     "AND (s.id IN (SELECT security_id FROM positions) OR s.id IN (SELECT security_id FROM watchlist)) " +
@@ -76,16 +78,28 @@ export async function runDaily(env, which, now = new Date()) {
   // 국내 재무 이력 보강 (한 종목). 실패해도 시세·스냅샷 결과는 그대로 남긴다.
   let dart = null;
   const dartErrors = [];
-  const target = await dartBackfillTarget(env, now);
+  // 국내 크론에서만 수행한다. 시세 최대 37회 + DART 4회로 외부 요청 50회 안에 남는다.
+  const target = which === "kr" ? await dartBackfillTarget(env, now) : null;
   if (target) {
-    await env.DB.prepare(
-      "INSERT INTO meta (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
-    ).bind("dart:tried:" + target.id, date, nowIso(now)).run();
     try {
-      const r = await refreshFundamentals(env, target, { withDart: true, now });
-      dart = { ysym: target.ysym, financials: r.financials };
+      const r = await refreshFundamentals(env, target, {
+        withDart: true, withMarketSource: false, dartOffset: target.dart_offset,
+        dartCount: DART_REPORTS_PER_RUN, dartBatchByYear: true, now,
+      });
+      const progress = r.dartProgress || { nextOffset: target.dart_offset, done: true };
+      const metaStmts = [env.DB.prepare(
+        "INSERT INTO meta (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+      ).bind("dart:cursor:" + target.id, progress.done ? "0" : String(progress.nextOffset), nowIso(now))];
+      if (progress.done || r.errors.length) metaStmts.push(env.DB.prepare(
+        "INSERT INTO meta (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+      ).bind("dart:tried:" + target.id, date, nowIso(now)));
+      await env.DB.batch(metaStmts);
+      dart = { ysym: target.ysym, financials: r.financials, progress };
       dartErrors.push(...r.errors.map((e) => target.ysym + ": " + e));
     } catch (e) {
+      await env.DB.prepare(
+        "INSERT INTO meta (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+      ).bind("dart:tried:" + target.id, date, nowIso(now)).run();
       dartErrors.push(target.ysym + ": " + String(e.message || e));
     }
   }

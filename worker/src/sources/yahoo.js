@@ -160,8 +160,10 @@ const SUMMARY_MODULES = [
 /** quoteSummary 원본 → 컨센서스 추정치와 다음 실적일. */
 export function parseYahooSummary(data, asOf) {
   const x = data?.quoteSummary?.result?.[0];
-  if (!x) return { estimates: [], earningsDate: null };
+  if (!x) return { estimates: [], earningsDate: null, financialCurrency: null };
   const fd = x.financialData || {};
+  const financialCurrency = typeof fd.financialCurrency === "string" && /^[A-Z]{3}$/.test(fd.financialCurrency)
+    ? fd.financialCurrency : null;
   const estimates = [];
   const target = raw(fd.targetMeanPrice);
   const rating = raw(fd.recommendationMean);
@@ -184,7 +186,7 @@ export function parseYahooSummary(data, asOf) {
   }
   const ed = x.calendarEvents?.earnings?.earningsDate?.[0];
   const earningsDate = ed?.fmt || (typeof ed?.raw === "number" ? new Date(ed.raw * 1000).toISOString().slice(0, 10) : null);
-  return { estimates: estimates.map((e) => ({ ...e, as_of: asOf, source: "yahoo" })), earningsDate };
+  return { estimates: estimates.map((e) => ({ ...e, as_of: asOf, source: "yahoo" })), earningsDate, financialCurrency };
 }
 
 const SERIES_TYPES = [
@@ -227,6 +229,105 @@ export function parseYahooTimeSeries(data) {
   });
 }
 
+/**
+ * Yahoo 재무의 계산 가능 단위를 표시한다.
+ * ADR의 EPS/BPS·주식 수가 원주 기준인지 ADR 기준인지 심볼마다 다를 수 있으므로 추정 환산하지 않는다.
+ * 원천 통화와 상장 통화가 다르면 raw 숫자는 보존하되 currency=null로 표시해 계산을 막는다.
+ */
+export function normalizeYahooFinancials(rows, {
+  sourceCurrency, listingCurrency, adrRatio, endRateForDate = null, incomeRateForDate = null,
+}) {
+  const source = sourceCurrency || null;
+  const listing = listingCurrency || null;
+  const crossCurrency = Boolean(source && listing && source !== listing);
+  return rows.map((row) => {
+    const ratio = Number(adrRatio) > 0 ? Number(adrRatio) : null;
+    const endRate = crossCurrency && typeof endRateForDate === "function" ? endRateForDate(row.period_end) : 1;
+    const incomeRate = crossCurrency && typeof incomeRateForDate === "function" ? incomeRateForDate(row.period_end) : 1;
+    // ADR 비율은 Yahoo가 돌려준 주당·주식 수의 단위를 검증하는 메타데이터다.
+    // 생산 TSM 데이터는 이미 ADR-equivalent 단위이므로 산술에는 다시 적용하지 않는다.
+    const ready = Boolean(source && listing && (!crossCurrency || (ratio && endRate && incomeRate)));
+    if (!ready) return {
+      ...row,
+      currency: null,
+      source_currency: source,
+      adr_ratio: ratio,
+      fx_rate: null,
+      balance_fx_rate: null,
+    };
+    if (!crossCurrency) {
+      return { ...row, currency: listing, source_currency: source, adr_ratio: 1, fx_rate: 1, balance_fx_rate: 1 };
+    }
+    return {
+      ...row,
+      revenue: typeof row.revenue === "number" ? row.revenue * incomeRate : row.revenue,
+      operating_income: typeof row.operating_income === "number" ? row.operating_income * incomeRate : row.operating_income,
+      net_income: typeof row.net_income === "number" ? row.net_income * incomeRate : row.net_income,
+      ebitda: typeof row.ebitda === "number" ? row.ebitda * incomeRate : row.ebitda,
+      eps: typeof row.eps === "number" ? row.eps * incomeRate : row.eps,
+      bps: typeof row.bps === "number" ? row.bps * endRate : row.bps,
+      net_debt: typeof row.net_debt === "number" ? row.net_debt * endRate : row.net_debt,
+      // Yahoo TSM의 diluted shares는 이미 ADR-equivalent다. adr_ratio로 나누지 않는다.
+      shares_out: row.shares_out,
+      currency: listing,
+      source_currency: source,
+      adr_ratio: ratio,
+      fx_rate: incomeRate,
+      balance_fx_rate: endRate,
+    };
+  });
+}
+
+/** 분기말 이하의 마지막 거래일 환율(상장통화/재무통화). */
+export function financialRateAt(rows, date, inverse = false) {
+  let hit = null;
+  for (const row of rows) {
+    if (row.date > date) break;
+    if (row.close > 0) hit = row.close;
+  }
+  return hit == null ? null : (inverse ? 1 / hit : hit);
+}
+
+/** 분기말 직전 3개월의 일별 환율 산술평균(상장통화/재무통화). */
+export function financialIncomeRate(rows, periodEnd, inverse = false) {
+  const start = new Date(periodEnd + "T00:00:00Z");
+  if (Number.isNaN(start.getTime())) return null;
+  start.setUTCMonth(start.getUTCMonth() - 3);
+  const startDate = start.toISOString().slice(0, 10);
+  const rates = rows.filter((row) => row.date > startDate && row.date <= periodEnd && row.close > 0)
+    .map((row) => inverse ? 1 / row.close : row.close);
+  return rates.length ? rates.reduce((sum, value) => sum + value, 0) / rates.length : null;
+}
+
+/** 최근 5년 일별 환율과 분기 평균·분기말 조회 함수. */
+export async function yahooFinancialFxHistory(from, to) {
+  if (!from || !to) return null;
+  if (from === to) return { latestRate: 1, rateAsOf: null, endRate: () => 1, incomeRate: () => 1 };
+  const candidates = [];
+  // Yahoo의 대표 표기 `TWD=X`, `DKK=X`, `KRW=X`는 USD 1단위당 상대통화다.
+  if (to === "USD") candidates.push({ symbol: from + "=X", inverse: true });
+  if (from === "USD") candidates.push({ symbol: to + "=X", inverse: false });
+  candidates.push({ symbol: from + to + "=X", inverse: false });
+  candidates.push({ symbol: to + from + "=X", inverse: true });
+  const seen = new Set();
+  for (const candidate of candidates) {
+    if (seen.has(candidate.symbol)) continue;
+    seen.add(candidate.symbol);
+    try {
+      const rows = await history(candidate.symbol, "5y");
+      const last = rows.at(-1);
+      if (!last?.close) continue;
+      return {
+        latestRate: candidate.inverse ? 1 / last.close : last.close,
+        rateAsOf: last.date,
+        endRate: (date) => financialRateAt(rows, date, candidate.inverse),
+        incomeRate: (date) => financialIncomeRate(rows, date, candidate.inverse),
+      };
+    } catch { /* 다음 후보 */ }
+  }
+  return null;
+}
+
 /** 다음 실적 발표일만 (일일 크론용, calendarEvents 모듈 하나라 가볍다). 없으면 null. */
 export async function yahooEarningsDate(env, symbol, now = new Date()) {
   const data = await yahooAuthed(env, "/v10/finance/quoteSummary/" + encodeURIComponent(symbol) + "?modules=calendarEvents");
@@ -234,7 +335,7 @@ export async function yahooEarningsDate(env, symbol, now = new Date()) {
 }
 
 /** 미국 종목의 분기 재무·컨센서스·실적일을 한 번에 가져온다. */
-export async function yahooFundamentals(env, symbol, now = new Date()) {
+export async function yahooFundamentals(env, symbol, now = new Date(), { listingCurrency = null, adrRatio = null } = {}) {
   const asOf = now.toISOString().slice(0, 10);
   // 5년을 요청하지만 야후는 최근 5개 분기만 준다. 과거 이력은 SEC(scripts/sec-history.mjs)가 채운다.
   const start = Math.floor(Date.UTC(now.getUTCFullYear() - 5, 0, 1) / 1000);
@@ -245,5 +346,29 @@ export async function yahooFundamentals(env, symbol, now = new Date()) {
       "?symbol=" + encodeURIComponent(symbol) + "&type=" + SERIES_TYPES.join(",") + "&period1=" + start + "&period2=" + end),
   ]);
   const s = parseYahooSummary(summary, asOf);
-  return { financials: parseYahooTimeSeries(series), estimates: s.estimates, earningsDate: s.earningsDate };
+  const sourceCurrency = s.financialCurrency || listingCurrency;
+  const fx = sourceCurrency && listingCurrency
+    ? await yahooFinancialFxHistory(sourceCurrency, listingCurrency)
+    : null;
+  const financials = normalizeYahooFinancials(parseYahooTimeSeries(series), {
+    sourceCurrency, listingCurrency, adrRatio,
+    endRateForDate: fx?.endRate || null,
+    incomeRateForDate: fx?.incomeRate || null,
+  });
+  const errors = [];
+  if (sourceCurrency && listingCurrency && sourceCurrency !== listingCurrency && !(Number(adrRatio) > 0)) {
+    errors.push("ADR 원주 비율이 없어 재무 단위를 확인하지 못했습니다");
+  }
+  if (sourceCurrency && listingCurrency && sourceCurrency !== listingCurrency && !fx) {
+    errors.push(sourceCurrency + "→" + listingCurrency + " 환율 이력을 받지 못했습니다");
+  }
+  return {
+    financials,
+    estimates: s.estimates,
+    earningsDate: s.earningsDate,
+    financialCurrency: sourceCurrency,
+    financialToListingRate: fx?.latestRate ?? null,
+    financialRateAsOf: fx?.rateAsOf ?? null,
+    errors,
+  };
 }

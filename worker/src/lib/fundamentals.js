@@ -4,11 +4,20 @@ const FIN_COLS = ["revenue", "operating_income", "net_income", "eps", "bps", "eb
 
 function dedupeFinancials(rows) {
   const byKey = new Map();
-  // 같은 기간이면 DART(공식)가 네이버 폴백보다 우선한다.
+  // 같은 기간이면 DART(공식)의 값이 우선하되, DART에 없는 BPS·EBITDA·주식 수 등은
+  // 네이버 폴백으로 채운다. 소스 배열 순서와 무관하게 같은 결과가 나와야 한다.
   for (const row of rows) {
     const key = row.period_end + ":" + row.period_type;
     const old = byKey.get(key);
-    if (!old || row.source === "dart" || old.source !== "dart") byKey.set(key, row);
+    if (!old) {
+      byKey.set(key, row);
+      continue;
+    }
+    const preferred = row.source === "dart" ? row : old.source === "dart" ? old : row;
+    const fallback = preferred === row ? old : row;
+    const merged = { ...fallback, ...preferred };
+    for (const col of FIN_COLS) merged[col] = preferred[col] ?? fallback[col] ?? null;
+    byKey.set(key, merged);
   }
   return [...byKey.values()];
 }
@@ -17,19 +26,23 @@ export function upsertFinancialsStmt(env, securityId, rows, fetchedAt) {
   const packed = JSON.stringify(dedupeFinancials(rows).map((r) => [
     r.period_end, r.period_type, r.revenue, r.operating_income, r.net_income, r.eps, r.bps,
     r.ebitda, r.net_debt, r.shares_out, r.raw, r.source,
+    r.currency ?? null, r.source_currency ?? null, r.adr_ratio ?? null, r.fx_rate ?? null, r.balance_fx_rate ?? null,
   ]));
-  const keepDart = (col) => "CASE WHEN financials.source = 'dart' AND excluded.source <> 'dart' THEN financials." + col +
-    " ELSE COALESCE(excluded." + col + ", financials." + col + ") END";
+  const mergeCol = (col) => "CASE WHEN financials.source = 'dart' AND excluded.source <> 'dart' " +
+    "THEN COALESCE(financials." + col + ", excluded." + col + ") " +
+    "ELSE COALESCE(excluded." + col + ", financials." + col + ") END";
   return env.DB.prepare(
-    "INSERT INTO financials (security_id, period_end, period_type, revenue, operating_income, net_income, eps, bps, ebitda, net_debt, shares_out, raw, source, fetched_at) " +
+    "INSERT INTO financials (security_id, period_end, period_type, revenue, operating_income, net_income, eps, bps, ebitda, net_debt, shares_out, raw, source, fetched_at, currency, source_currency, adr_ratio, fx_rate, balance_fx_rate) " +
     "SELECT ?1, json_extract(value,'$[0]'), json_extract(value,'$[1]'), json_extract(value,'$[2]'), json_extract(value,'$[3]'), " +
     "json_extract(value,'$[4]'), json_extract(value,'$[5]'), json_extract(value,'$[6]'), json_extract(value,'$[7]'), " +
-    "json_extract(value,'$[8]'), json_extract(value,'$[9]'), json_extract(value,'$[10]'), json_extract(value,'$[11]'), ?3 " +
+    "json_extract(value,'$[8]'), json_extract(value,'$[9]'), json_extract(value,'$[10]'), json_extract(value,'$[11]'), ?3, " +
+    "json_extract(value,'$[12]'), json_extract(value,'$[13]'), json_extract(value,'$[14]'), json_extract(value,'$[15]'), json_extract(value,'$[16]') " +
     "FROM json_each(?2) WHERE true ON CONFLICT(security_id, period_end, period_type) DO UPDATE SET " +
-    FIN_COLS.map((c) => c + " = " + keepDart(c)).join(", ") +
+    FIN_COLS.map((c) => c + " = " + mergeCol(c)).join(", ") +
     ", raw = CASE WHEN financials.source = 'dart' AND excluded.source <> 'dart' THEN financials.raw ELSE excluded.raw END" +
     ", source = CASE WHEN financials.source = 'dart' AND excluded.source <> 'dart' THEN financials.source ELSE excluded.source END" +
-    ", fetched_at = excluded.fetched_at"
+    ", fetched_at = excluded.fetched_at, currency = excluded.currency, source_currency = excluded.source_currency" +
+    ", adr_ratio = excluded.adr_ratio, fx_rate = excluded.fx_rate, balance_fx_rate = excluded.balance_fx_rate"
   ).bind(securityId, packed, fetchedAt);
 }
 
@@ -70,7 +83,8 @@ export function upsertEarningsStmt(env, securityId, date, createdAt) {
 /** 재무 갱신 대상: 보유+관심 equity, 숨김 제외. */
 export async function trackedEquities(env) {
   const { results } = await env.DB.prepare(
-    "SELECT s.id, s.name, s.ticker, s.ysym, s.market, s.currency, s.dart_corp_code " +
+    "SELECT s.id, s.name, s.ticker, s.ysym, s.market, s.currency, s.financial_currency, s.adr_ratio, " +
+    "s.financial_to_listing_rate, s.financial_rate_as_of, s.dart_corp_code " +
     "FROM securities s WHERE s.archived_at IS NULL AND s.asset_class = 'equity' AND " +
     "(s.id IN (SELECT security_id FROM positions) OR s.id IN (SELECT security_id FROM watchlist)) ORDER BY s.id"
   ).all();

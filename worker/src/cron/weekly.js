@@ -14,20 +14,30 @@ const DART_PER_RUN = 1;
 
 async function getSecurity(env, id) {
   return env.DB.prepare(
-    "SELECT id, name, ticker, ysym, market, currency, dart_corp_code FROM securities WHERE id = ?1 AND archived_at IS NULL"
+    "SELECT id, name, ticker, ysym, market, currency, financial_currency, adr_ratio, " +
+    "financial_to_listing_rate, financial_rate_as_of, dart_corp_code " +
+    "FROM securities WHERE id = ?1 AND archived_at IS NULL"
   ).bind(id).first();
 }
 
 /** 한 종목. 소스 하나가 실패해도 다른 소스 결과는 저장한다. */
-export async function refreshFundamentals(env, secOrId, { withDart = true, now = new Date() } = {}) {
+export async function refreshFundamentals(env, secOrId, {
+  withDart = true, withMarketSource = true, dartOffset = 0, dartCount = 16, dartBatchByYear = false,
+  now = new Date(),
+} = {}) {
   const sec = typeof secOrId === "object" ? secOrId : await getSecurity(env, secOrId);
   if (!sec) throw new Error("종목을 찾지 못했습니다");
   const sources = [];
-  if (sec.market === "US") sources.push(["yahoo", () => yahooFundamentals(env, sec.ysym, now)]);
+  if (sec.market === "US" && withMarketSource) sources.push(["yahoo", () => yahooFundamentals(env, sec.ysym, now, {
+    listingCurrency: sec.currency,
+    adrRatio: sec.adr_ratio,
+  })]);
   else if (sec.market === "KR") {
-    sources.push(["naver", () => naverFundamentals(sec.ticker, now)]);
+    if (withMarketSource) sources.push(["naver", () => naverFundamentals(sec.ticker, now)]);
     if (withDart && env.DART_API_KEY && sec.dart_corp_code) {
-      sources.push(["dart", () => dartFundamentals(env.DART_API_KEY, sec.dart_corp_code, now)]);
+      sources.push(["dart", () => dartFundamentals(env.DART_API_KEY, sec.dart_corp_code, now, {
+        offset: dartOffset, count: dartCount, batchByYear: dartBatchByYear,
+      })]);
     }
   }
 
@@ -35,28 +45,52 @@ export async function refreshFundamentals(env, secOrId, { withDart = true, now =
   const financials = [];
   const estimates = [];
   let earningsDate = null;
+  let dartProgress = null;
+  let yahooMetadata = null;
   const errors = [];
   settled.forEach((r, i) => {
     const name = sources[i][0];
     if (r.status === "rejected") errors.push(name + ": " + String(r.reason?.message || r.reason));
     else {
-      financials.push(...(r.value.financials || []));
+      const sourceCurrency = r.value.financialCurrency || sec.financial_currency || sec.currency;
+      const rows = (r.value.financials || []).map((x) => {
+        if (x.currency !== undefined) return x;
+        if (sourceCurrency === sec.currency) {
+          return { ...x, currency: sec.currency, source_currency: sourceCurrency, adr_ratio: 1, fx_rate: 1, balance_fx_rate: 1 };
+        }
+        return { ...x, currency: null, source_currency: sourceCurrency, adr_ratio: sec.adr_ratio || null, fx_rate: null, balance_fx_rate: null };
+      });
+      financials.push(...rows);
       estimates.push(...(r.value.estimates || []));
       earningsDate ||= r.value.earningsDate || null;
+      if (name === "dart") dartProgress = r.value.progress || null;
+      if (name === "yahoo") yahooMetadata = r.value;
       errors.push(...(r.value.errors || []).map((e) => name + ": " + e));
     }
   });
-  if (!financials.length && !estimates.length && !earningsDate) {
+  // DART 배치가 정상 응답했지만 해당 보고서가 없는 경우에도 커서는 전진해야 한다.
+  if (!financials.length && !estimates.length && !earningsDate && !dartProgress) {
     throw new Error(errors[0] || "재무 데이터를 찾지 못했습니다");
   }
 
   const at = nowIso(now);
   const stmts = [];
   if (financials.length) stmts.push(upsertFinancialsStmt(env, sec.id, financials, at));
+  if (yahooMetadata?.financialCurrency) {
+    stmts.push(env.DB.prepare(
+      "UPDATE securities SET financial_currency=?1, financial_to_listing_rate=?2, financial_rate_as_of=?3, updated_at=?4 WHERE id=?5"
+    ).bind(
+      yahooMetadata.financialCurrency,
+      yahooMetadata.financialToListingRate ?? null,
+      yahooMetadata.financialRateAsOf ?? null,
+      at,
+      sec.id,
+    ));
+  }
   if (estimates.length) stmts.push(upsertEstimatesStmt(env, sec.id, estimates));
   if (earningsDate) stmts.push(...replaceEarningsStmts(env, sec.id, earningsDate, at, now.toISOString().slice(0, 10)));
   if (stmts.length) await env.DB.batch(stmts);
-  return { security_id: sec.id, financials: financials.length, estimates: estimates.length, earningsDate, errors };
+  return { security_id: sec.id, financials: financials.length, estimates: estimates.length, earningsDate, errors, dartProgress };
 }
 
 /** 무료 플랜 쿼리·서브요청 한도를 위해 8종목씩 순환한다. */

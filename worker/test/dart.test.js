@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { makeDb } from "./d1shim.js";
-import { deriveQ4 } from "../src/sources/dart.js";
-import { dartBackfillTarget, DART_MIN_QUARTERS } from "../src/cron/daily.js";
+import { deriveQ4, dartFundamentals } from "../src/sources/dart.js";
+import { dartBackfillTarget, DART_MIN_QUARTERS, DART_REPORTS_PER_RUN } from "../src/cron/daily.js";
 
 const q = (end, type, v) => ({
   period_end: end, period_type: type, source: "dart",
@@ -26,6 +26,50 @@ describe("deriveQ4", () => {
     const [q4] = deriveQ4(rows);
     expect(q4.revenue).toBe(10);
     expect(q4.eps).toBeNull();
+  });
+});
+
+describe("DART 배치", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("한 실행은 한 사업연도의 최대 4개 보고서만 받고 다음 커서를 돌려준다", async () => {
+    const urls = [];
+    vi.stubGlobal("fetch", async (url) => {
+      urls.push(String(url));
+      return new Response(JSON.stringify({ status: "013", message: "조회된 데이타가 없습니다." }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    });
+
+    const first = await dartFundamentals("key", "00164779", new Date("2026-09-21T00:00:00Z"), {
+      offset: 0, count: DART_REPORTS_PER_RUN, batchByYear: true,
+    });
+    expect(urls).toHaveLength(2); // 2026년은 1·2분기만 공시 완료
+    expect(first.progress).toEqual({ offset: 0, nextOffset: 2, total: 16, done: false });
+
+    urls.length = 0;
+    const second = await dartFundamentals("key", "00164779", new Date("2026-09-21T00:00:00Z"), {
+      offset: first.progress.nextOffset, count: DART_REPORTS_PER_RUN, batchByYear: true,
+    });
+    expect(urls).toHaveLength(4); // 다음 실행은 2025년 한 해
+    expect(second.progress.nextOffset).toBe(6);
+  });
+
+  it("묶음 일부가 실패하면 성공분은 반환하되 커서는 넘기지 않는다", async () => {
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => {
+      calls++;
+      if (calls === 1) throw new Error("일시 오류");
+      return new Response(JSON.stringify({ status: "000", list: [
+        { fs_div: "CFS", account_id: "ifrs-full_Revenue", account_nm: "매출액", thstrm_amount: "100" },
+      ] }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    const result = await dartFundamentals("key", "00164779", new Date("2026-09-21T00:00:00Z"), {
+      offset: 0, count: DART_REPORTS_PER_RUN, batchByYear: true,
+    });
+    expect(result.financials).toHaveLength(1);
+    expect(result.errors).toEqual(["일시 오류"]);
+    expect(result.progress).toMatchObject({ offset: 0, nextOffset: 0, done: false });
   });
 });
 
@@ -62,5 +106,11 @@ describe("dartBackfillTarget (실제 SQLite)", () => {
     expect((await dartBackfillTarget(env, now)).ticker).toBe("352820");
     env.DB.raw.exec("UPDATE meta SET value = '2026-09-20' WHERE key = 'dart:tried:7'");
     expect(await dartBackfillTarget(env, now)).toBeNull();
+  });
+  it("저장된 보고서 커서를 다음 대상에 포함한다", async () => {
+    const env = setup();
+    env.DB.raw.exec("INSERT INTO meta (key, value, updated_at) VALUES ('dart:cursor:5', '6', 'x')");
+    const target = await dartBackfillTarget(env, now);
+    expect(target).toMatchObject({ id: 5, dart_offset: 6 });
   });
 });

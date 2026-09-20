@@ -22,6 +22,20 @@ const FIELDS = {
   },
   market: (v) => oneOf(v, MARKETS, "market"),
   currency: (v) => oneOf(v, CURRENCIES, "currency"),
+  financial_currency: (v) => {
+    if (v == null || v === "") return null;
+    const s = String(v).trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(s)) throw new HttpError(400, "financial_currency는 3자리 통화 코드여야 합니다");
+    return s;
+  },
+  adr_ratio: (v) => positiveOrNull(v, "adr_ratio"),
+  financial_to_listing_rate: (v) => positiveOrNull(v, "financial_to_listing_rate"),
+  financial_rate_as_of: (v) => {
+    if (v == null || v === "") return null;
+    const s = String(v).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new HttpError(400, "financial_rate_as_of는 YYYY-MM-DD 형식이어야 합니다");
+    return s;
+  },
   sector: (v) => (v == null || v === "" ? null : str(v, "sector")),
   asset_class: (v) => oneOf(v, ASSET_CLASSES, "asset_class"),
   expected_return_pct: (v) => {
@@ -49,6 +63,25 @@ function oneOf(v, list, key) {
   if (!list.includes(v)) throw new HttpError(400, key + "는 " + list.join(" | ") + " 중 하나여야 합니다");
   return v;
 }
+function positiveOrNull(v, key) {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) throw new HttpError(400, key + "는 0보다 큰 숫자여야 합니다");
+  return n;
+}
+
+/** 종목 메타데이터만으로 판단한 환산 준비 상태. 실제 재무행 상태는 /fundamentals가 한 번 더 확인한다. */
+export function valuationReadiness(row) {
+  const source = row.financial_currency || row.currency;
+  if (!source || source === row.currency) return { valuation_ready: true, valuation_block_reason: null };
+  if (!(Number(row.adr_ratio) > 0)) {
+    return { valuation_ready: false, valuation_block_reason: "ADR 원주 비율이 필요합니다" };
+  }
+  if (!(Number(row.financial_to_listing_rate) > 0)) {
+    return { valuation_ready: false, valuation_block_reason: source + "→" + row.currency + " 재무 환산율이 필요합니다" };
+  }
+  return { valuation_ready: true, valuation_block_reason: null };
+}
 
 export function pickFields(body, { partial }) {
   const out = {};
@@ -66,7 +99,12 @@ export function pickFields(body, { partial }) {
 /** DB 행 → API 모양. band_multiples를 객체로 되돌린다. */
 export function securityOut(row) {
   if (!row) return null;
-  return { ...row, band_multiples: row.band_multiples ? JSON.parse(row.band_multiples) : null };
+  return {
+    ...row,
+    financial_currency: row.financial_currency || row.currency,
+    band_multiples: row.band_multiples ? JSON.parse(row.band_multiples) : null,
+    ...valuationReadiness(row),
+  };
 }
 
 /**
