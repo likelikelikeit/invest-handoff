@@ -1,5 +1,4 @@
 <script>
-  import { onMount } from "svelte";
   import { bandPrice, quantile, scenarioTarget, VALUATION_METRICS } from "../lib/calc/valuation.js";
 
   let {
@@ -95,13 +94,16 @@
     return { multiple: m, price: bandPrice(d.ttm, metric, m) };
   }
 
-  onMount(() => {
+  $effect(() => {
+    const container = el;
+    if (!container) return;
+
     let disposed = false;
     let cleanup = () => {};
     import("lightweight-charts").then((lc) => {
       if (disposed) return;
       ({ AreaSeries, LineSeries, ColorType, CrosshairMode, LineStyle } = lc);
-      chart = lc.createChart(el, {
+      chart = lc.createChart(container, {
       autoSize: true, handleScroll: false, handleScale: false,
       grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: .08, bottom: .08 } },
@@ -115,7 +117,7 @@
       });
       function scrubAt(clientX) {
         if (!mainSeries || !series.length) return;
-        const x = clientX - el.getBoundingClientRect().left;
+        const x = clientX - container.getBoundingClientRect().left;
         const logical = chart.timeScale().coordinateToLogical(x);
         if (logical == null) return;
         const i = Math.max(0, Math.min(series.length - 1, Math.round(logical)));
@@ -126,8 +128,8 @@
       const down = (e) => { if (e.pointerType === "touch") scrubAt(e.clientX); };
       const move = (e) => { if (e.pointerType === "touch") scrubAt(e.clientX); };
       const up = (e) => { if (e.pointerType === "touch") { chart.clearCrosshairPosition(); hover = null; } };
-      el.addEventListener("pointerdown", down); el.addEventListener("pointermove", move);
-      el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+      container.addEventListener("pointerdown", down); container.addEventListener("pointermove", move);
+      container.addEventListener("pointerup", up); container.addEventListener("pointercancel", up);
       const theme = () => rebuild();
       const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : { addEventListener() {}, removeEventListener() {} };
       mq.addEventListener("change", theme);
@@ -135,8 +137,8 @@
       mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
       rebuild();
       cleanup = () => {
-        el.removeEventListener("pointerdown", down); el.removeEventListener("pointermove", move);
-        el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", up);
+        container.removeEventListener("pointerdown", down); container.removeEventListener("pointermove", move);
+        container.removeEventListener("pointerup", up); container.removeEventListener("pointercancel", up);
         mq.removeEventListener("change", theme); mo.disconnect(); chart.remove(); chart = null;
       };
     });
