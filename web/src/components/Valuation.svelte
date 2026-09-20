@@ -8,11 +8,13 @@
     valueFromGrowth, growthFromValue, scenarioTarget, latestConsensusValue, roundValue,
   } from "../lib/calc/valuation.js";
 
-  let { id, sec, payload, quote = null, initialPrices = null, initialScenarios = null } = $props();
+  let {
+    id, sec, payload, quote = null, initialPrices = null, initialScenarios = null,
+    metric = $bindable("per"),
+  } = $props();
   let prices = $state([]);
   let scenarios = $state([]);
   let mode = $state("bands");
-  let metric = $state("per");
   let range = $state("3y");
   let bands = $state({});
   let activeScenario = $state("base");

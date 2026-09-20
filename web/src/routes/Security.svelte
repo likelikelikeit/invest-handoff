@@ -27,7 +27,9 @@
   let busy = $state(false);
   let fundamentals = $state(null);
   let fundErr = $state("");
+  let valuationMetric = $state("per");
   const ASSET_LABELS = { equity: "주식", bond: "채권", cash: "현금", index: "지수", fx: "환율", other: "기타" };
+  const VALUATION_LABELS = { per: "PER", pbr: "PBR", ev_ebitda: "EV/EBITDA", psr: "PSR" };
 
   const pos = $derived(data.positions.find((p) => p.security_id === id));
   const q = $derived(sec ? data.quotes[sec.ysym] : null);
@@ -155,8 +157,8 @@
         <Fundamentals {id} payload={fundamentals} onrefresh={fetchFundamentals} />
       </Section>
 
-      <Section id="sd-valuation" title="밸류에이션" note={sec.band_default?.toUpperCase() || "PER"}>
-        <Valuation {id} {sec} payload={fundamentals} quote={q} />
+      <Section id="sd-valuation" title="밸류에이션" note={VALUATION_LABELS[valuationMetric] || "PER"}>
+        <Valuation {id} {sec} payload={fundamentals} quote={q} bind:metric={valuationMetric} />
       </Section>
 
       <Section id="sd-views" title="내 의견" note={view ? "최근 " + stamp(view.created_at) : ""}>

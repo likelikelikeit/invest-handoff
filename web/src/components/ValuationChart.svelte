@@ -27,6 +27,16 @@
     d.setUTCMonth(d.getUTCMonth() + Math.round(years * 12));
     return d.toISOString().slice(0, 10);
   }
+  function monthTick(time) {
+    let year, month;
+    if (typeof time === "string") [year, month] = time.split("-").map(Number);
+    else if (typeof time === "number") {
+      const d = new Date(time * 1000);
+      year = d.getUTCFullYear(); month = d.getUTCMonth() + 1;
+    } else ({ year, month } = time || {});
+    if (!year || !month) return "";
+    return `${String(year).slice(-2)}.${String(month).padStart(2, "0")}`;
+  }
   function removeSeries() {
     for (const s of extras) chart.removeSeries(s);
     extras = [];
@@ -107,7 +117,10 @@
       autoSize: true, handleScroll: false, handleScale: false,
       grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: .08, bottom: .08 } },
-      timeScale: { borderVisible: false, fixLeftEdge: true, fixRightEdge: true, lockVisibleTimeRangeOnResize: true },
+      timeScale: {
+        borderVisible: false, fixLeftEdge: true, fixRightEdge: true, lockVisibleTimeRangeOnResize: true,
+        tickMarkFormatter: monthTick,
+      },
       crosshair: { mode: CrosshairMode.Magnet, vertLine: { width: 1, style: LineStyle.Solid, labelVisible: false }, horzLine: { visible: false, labelVisible: false } },
       localization: { locale: "ko-KR" },
     });
