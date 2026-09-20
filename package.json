@@ -3,14 +3,17 @@
   "private": true,
   "workspaces": [
     "web",
-    "worker"
+    "worker",
+    "mcp"
   ],
   "scripts": {
     "dev": "npm run dev -w web",
     "build": "npm run build -w web",
-    "test": "npm run test -w web && npm run test -w worker",
+    "test": "npm run test -w web && npm run test -w worker && npm run test -w mcp",
     "worker:dev": "npm run dev -w worker",
-    "worker:deploy": "npm run deploy -w worker"
+    "worker:deploy": "npm run deploy -w worker",
+    "mcp:dev": "npm run dev -w invest-mcp",
+    "mcp:deploy": "npm run deploy -w invest-mcp"
   },
   "engines": {
     "node": ">=20"

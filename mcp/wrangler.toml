@@ -1,0 +1,14 @@
+# invest-mcp — Claude 커스텀 커넥터가 붙는 MCP 서버 (SPEC §2.3, 마일스톤 9).
+# invest-api와 같은 D1을 읽는다. 쓰기는 OAuth 테이블(mcp_*)뿐이다.
+name = "invest-mcp"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "invest"
+database_id = "50f995f4-8055-4b85-94c5-a90aeba7abf8"
+# 마이그레이션은 worker/migrations 한 곳에서만 돌린다(같은 DB를 두 번 관리하지 않는다).
+
+# 시크릿: APP_TOKEN (invest-api와 같은 값). 로그인 화면에서 붙여넣는 토큰이다.
+#   npx wrangler secret put APP_TOKEN --config mcp/wrangler.toml

@@ -4,11 +4,12 @@
 
 - 프론트 `web/` — Svelte 5 + Vite, GitHub Pages (`https://likelikelikeit.github.io/invest-handoff/`)
 - 백엔드 `worker/` — Cloudflare Worker `invest-api` (`https://invest-api.hyungjin0416.workers.dev`) + D1 `invest`
+- MCP `mcp/` — Cloudflare Worker `invest-mcp` (`https://invest-mcp.hyungjin0416.workers.dev`). Claude 커스텀 커넥터가 같은 D1을 읽는다
 
 ## 로컬 개발
 
 ```bash
-npm install                      # 루트에서 한 번 (web, worker 둘 다 설치)
+npm install                      # 루트에서 한 번 (web, worker, mcp 전부 설치)
 npm run dev                      # 프론트 http://localhost:5173/invest-handoff/
 npm test                         # Vitest
 npm run db:migrate:local -w worker
@@ -79,6 +80,29 @@ npx wrangler d1 create invest    # 나온 database_id를 wrangler.toml에 넣는
 npx wrangler d1 migrations apply invest --remote
 npx wrangler deploy
 ```
+
+## MCP 서버 (Claude 커스텀 커넥터)
+
+`invest-mcp`는 앱과 같은 D1을 **읽기 전용**으로 보는 별도 Worker다. 계산(비중·수익률·TTM·PER)은 툴이 끝내서 넘기고, Claude는 읽기만 한다.
+
+```bash
+cd mcp
+npx wrangler secret put APP_TOKEN   # invest-api와 같은 값
+npx wrangler deploy
+npm test                            # OAuth 전 구간 + 툴 결과 (실제 SQLite)
+```
+
+연결: Claude → 설정 → 커넥터 → 커스텀 커넥터 추가 → `https://invest-mcp.hyungjin0416.workers.dev/mcp`.
+로그인 화면이 뜨면 앱에서 쓰는 **앱 토큰**을 붙여넣는다(계정·비밀번호 없음). 접근 토큰 30일, 갱신 토큰 180일.
+
+| 툴 | 주는 것 |
+|---|---|
+| `get_portfolio` | 보유·수량·평단·최신 종가·원화 평가금액·비중·손익·현금 |
+| `get_investment_views` | 투자의견 이력(등급·목표가·근거)과 지난 의견 성과 요약 |
+| `get_company_view` | 한 종목의 시세·52주 범위·보유·재무(TTM)·컨센서스·의견·판정·일정 |
+| `get_calendar` | 기간별 실적·거시·직접 넣은 일정 (기본 30일) |
+| `get_macro` | 거시 시계열 최신값·1년 전 대비·점도표 중간값 |
+| `get_tech_calls` | 기술적 판정 기록과 1주·1개월 뒤 가격 |
 
 ## 비밀
 
