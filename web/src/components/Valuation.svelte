@@ -52,6 +52,12 @@
   const ownTarget = $derived(scenarioTarget(baseDraft));
   const priceFmt = $derived(valueFmt(sec));
 
+  function cloneBands(value) {
+    return Object.fromEntries(Object.entries(value || {}).map(([key, multiples]) => [
+      key, Array.isArray(multiples) ? [...multiples] : multiples,
+    ]));
+  }
+
   function normalizeMultiples(a) {
     const out = (a || []).map(Number).filter((n) => n > 0).sort((x, y) => x - y).slice(0, 5);
     return out.length === 5 ? out : [5, 10, 15, 20, 25];
@@ -133,7 +139,8 @@
     prices = initialPrices || [];
     scenarios = initialScenarios || [];
     metric = sec.band_default || "per";
-    bands = structuredClone(sec.band_multiples || {});
+    // sec는 Svelte의 deep proxy일 수 있어 structuredClone이 DataCloneError를 낸다.
+    bands = cloneBands(sec.band_multiples);
     if (initialPrices == null && id) loadValuation();
   });
   $effect(() => {
@@ -146,7 +153,7 @@
   async function saveBandSettings(next = bands) {
     try {
       const r = await api("/securities/" + id, { method: "PATCH", body: { band_default: metric, band_multiples: next } });
-      bands = structuredClone(r.security.band_multiples || next);
+      bands = cloneBands(r.security.band_multiples || next);
       toast("밴드 설정을 저장했습니다");
     } catch (e) { toast("저장 실패: " + e.message); }
   }

@@ -49,7 +49,11 @@ export async function getFundamentals(request, env, headers, p) {
 export async function refreshFundamentalsRoute(request, env, headers, p) {
   const s = await sec(env, p.id);
   try {
-    const result = await refreshFundamentals(env, s, { withDart: true });
+    // 국내 즉시 갱신도 한 사업연도(최대 4요청)만 받아 Worker 서브요청 한도를 넘지 않는다.
+    // 과거 이력은 일일 크론의 종목별 커서가 이어서 채운다.
+    const result = await refreshFundamentals(env, s, {
+      withDart: true, dartCount: 4, dartBatchByYear: true,
+    });
     return json({ ok: true, result }, 200, headers);
   } catch (e) {
     // 외부 비공식 소스 실패가 앱 전체 오류로 번지지 않게 200 + ok:false로 돌린다.
