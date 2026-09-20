@@ -88,10 +88,11 @@
   input:focus{outline:none;border-color:var(--accent)}
   .list{position:absolute;top:100%;left:0;right:0;z-index:30;margin-top:5px;background:var(--card);border:1px solid var(--line);
     border-radius:12px;box-shadow:0 10px 32px rgba(0,0,0,.14);max-height:280px;overflow-y:auto}
-  .item{display:flex;justify-content:space-between;align-items:baseline;gap:10px;min-height:44px;padding:10px 12px;font-size:14px;cursor:pointer;border-bottom:1px solid var(--line-soft)}
+  .item{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;min-height:44px;padding:10px 12px;font-size:14px;cursor:pointer;border-bottom:1px solid var(--line-soft)}
   .item:last-child{border-bottom:none}
   .item:hover,.item.on{background:var(--bg2)}
-  .an{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .as{font-size:12px;color:var(--sub2);flex:none}
+  .an{min-width:0;flex:1;white-space:normal;overflow:visible;line-height:1.4;word-break:keep-all}
+  .as{font-size:12px;color:var(--sub2);flex:none;white-space:nowrap;padding-top:2px}
   .note{padding:10px 12px;font-size:13px;color:var(--sub2)}
+  @media (max-width:420px){.item{flex-direction:column;gap:2px}.as{padding-top:0}}
 </style>

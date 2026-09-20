@@ -2,9 +2,10 @@
   // 자산 요약 (SPEC §4.2 블록 2): 총자산 큰 숫자, 도넛, 해외/국내 비중, 세로 종목 목록.
   import Donut from "./Donut.svelte";
   import Logo from "./Logo.svelte";
-  import { won, wonSigned, pct, pctSigned, qtyStr, priceStr, tone } from "../lib/format.js";
+  import { won, wonSigned, pct, pctSigned, qtyDisplay, priceStr, tone } from "../lib/format.js";
   import { assignColors } from "../lib/calc/colors.js";
   import { slices as makeSlices } from "../lib/calc/portfolio.js";
+  import { appearance } from "../lib/appearance.svelte.js";
 
   let { holdings, cash, showPrice = false } = $props();
 
@@ -17,6 +18,9 @@
   const pl = $derived(stock - cost);
   const foreign = $derived(holdings.filter((h) => h.mkt !== "KR").reduce((a, h) => a + h.qty * h.price, 0));
   const domestic = $derived(stock - foreign);
+  const foreignPct = $derived(total > 0 ? (foreign / total) * 100 : 0);
+  const domesticPct = $derived(total > 0 ? (domestic / total) * 100 : 0);
+  const cashPct = $derived(total > 0 ? (cash.total / total) * 100 : 0);
   const cashSlices = $derived(cash.parts.map((p) => ({
     key: p.currency,
     label: p.currency === "USD" ? "달러 현금" : "원화 현금",
@@ -34,17 +38,25 @@
       평가손익 <span class={tone(pl)}>{wonSigned(pl)} ({pctSigned(cost > 0 ? (pl / cost) * 100 : 0)})</span>
     </div>
 
-    <div class="split" aria-label="해외·국내·현금 비중">
+    <div class="split" class:labels={appearance.assetSplit === "labels"} aria-label="해외·국내·현금 비중">
       <div class="bar">
-        <span style:width="{total > 0 ? (foreign / total) * 100 : 0}%" class="f"></span>
-        <span style:width="{total > 0 ? (domestic / total) * 100 : 0}%" class="d"></span>
-        <span style:width="{total > 0 ? (cash.total / total) * 100 : 0}%" class="c"></span>
+        <span style:width="{foreignPct}%" class="f"></span>
+        <span style:width="{domesticPct}%" class="d"></span>
+        <span style:width="{cashPct}%" class="c"></span>
       </div>
-      <div class="legend num">
-        <span><i class="f"></i>해외 {pct(total > 0 ? (foreign / total) * 100 : 0)}</span>
-        <span><i class="d"></i>국내 {pct(total > 0 ? (domestic / total) * 100 : 0)}</span>
-        <span><i class="c"></i>현금 {pct(total > 0 ? (cash.total / total) * 100 : 0)}</span>
-      </div>
+      {#if appearance.assetSplit === "labels"}
+        <div class="split-labels num">
+          <span class="lf" style:left="0%">해외<b>{pct(foreignPct)}</b></span>
+          <span class="ld" style:left="{Math.min(foreignPct, 82)}%">국내<b>{pct(domesticPct)}</b></span>
+          <span class="lc" style:left="{Math.min(foreignPct + domesticPct, 100)}%">현금<b>{pct(cashPct)}</b></span>
+        </div>
+      {:else}
+        <div class="legend num">
+          <span><i class="f"></i>해외 {pct(foreignPct)}</span>
+          <span><i class="d"></i>국내 {pct(domesticPct)}</span>
+          <span><i class="c"></i>현금 {pct(cashPct)}</span>
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -62,7 +74,7 @@
           <span class="nm">
             <span class="n1">{h.name}</span>
             <span class="n2 num">
-              {#if showPrice}{priceStr(h)} · {/if}{qtyStr(h.qty)}주 · {pct(total > 0 ? (v / total) * 100 : 0)}
+              {#if showPrice}{priceStr(h)} · {/if}{qtyDisplay(h.qty)}주 · {pct(total > 0 ? (v / total) * 100 : 0)}
             </span>
           </span>
           <span class="val">
@@ -105,6 +117,11 @@
   .f{background:#ff2d55}.d{background:#0071e3}.c{background:var(--cash-krw)}
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;color:var(--sub)}
   .legend i{display:inline-block;width:8px;height:8px;border-radius:3px;margin-right:5px;vertical-align:1px}
+  .split-labels{position:relative;height:42px;margin-top:8px;font-size:12px}
+  .split-labels span{position:absolute;top:0;display:flex;flex-direction:column;line-height:1.35;white-space:nowrap}
+  .split-labels span:last-child{transform:translateX(-100%);text-align:right}
+  .split-labels b{font-size:14px;font-weight:680}
+  .lf{color:#e83050}.ld{color:#1768e8}.lc{color:var(--sub2)}
   .chart{padding:6px 0}
 
   .list{list-style:none;grid-column:1/-1}

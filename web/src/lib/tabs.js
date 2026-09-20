@@ -3,7 +3,7 @@ export const TABS = [
   { key: "home", label: "홈", href: "#/" },
   { key: "securities", label: "종목", href: "#/securities" },
   { key: "portfolio", label: "포트폴리오", href: "#/portfolio" },
-  { key: "views", label: "의견", href: "#/views" },
+  { key: "views", label: "투자의견", href: "#/views" },
   { key: "more", label: "더보기", href: "#/more" },
 ];
 

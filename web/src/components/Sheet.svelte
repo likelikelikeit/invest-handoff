@@ -43,8 +43,9 @@
   dialog::backdrop{background:rgba(0,0,0,.32);backdrop-filter:blur(2px)}
   .panel{
     display:flex;flex-direction:column;max-height:88vh;
-    background:var(--card);border-radius:var(--radius-lg) var(--radius-lg) 0 0;
-    box-shadow:0 -8px 40px rgba(0,0,0,.18);
+    background:color-mix(in srgb,var(--card) 88%,transparent);border:1px solid color-mix(in srgb,var(--line) 65%,transparent);border-bottom:0;border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+    backdrop-filter:blur(34px) saturate(185%);-webkit-backdrop-filter:blur(34px) saturate(185%);
+    box-shadow:0 -8px 40px rgba(0,0,0,.18),inset 0 1px 0 color-mix(in srgb,#fff 42%,transparent);
     padding-bottom:env(safe-area-inset-bottom);
     animation:up .26s cubic-bezier(.22,1,.36,1);
   }
@@ -59,7 +60,7 @@
   @keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
   @media (min-width:900px){
     dialog{inset:0;margin:auto;height:fit-content}
-    .panel{border-radius:var(--radius-lg)}
+    .panel{border:1px solid color-mix(in srgb,var(--line) 65%,transparent);border-radius:var(--radius-lg)}
     .grab{display:none}
   }
   @media (prefers-reduced-motion:reduce){.panel{animation:none}}

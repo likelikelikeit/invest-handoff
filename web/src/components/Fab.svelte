@@ -1,5 +1,5 @@
 <script>
-  // 전역 + 버튼 (SPEC §4.7): 스크린샷 가져오기 / 의견 기록 / 판정 / 종목 추가.
+  // 전역 + 버튼 (SPEC §4.7): 스크린샷 가져오기 / 투자의견 / 기술적 분석 / 종목 추가.
   import Sheet from "./Sheet.svelte";
   import { ui } from "../lib/ui.svelte.js";
 
@@ -18,8 +18,8 @@
 <Sheet bind:open title="추가">
   <ul class="menu">
     <li><button onclick={() => go(() => (ui.importOpen = true))}><span class="m1">스크린샷 가져오기</span><span class="m2">증권사 보유 화면으로 한 번에 갱신</span></button></li>
-    <li><button onclick={() => go(() => (ui.viewForm = {}))}><span class="m1">의견 기록</span><span class="m2">목표가 · 등급 · 논리</span></button></li>
-    <li><button onclick={() => go(() => (ui.tech = { side: "buy" }))}><span class="m1">판정</span><span class="m2">지금 사도·팔아도 될까 (단기 부담 계기판)</span></button></li>
+    <li><button onclick={() => go(() => (ui.viewForm = {}))}><span class="m1">투자의견</span><span class="m2">커버리지 개시 · 목표가 업데이트</span></button></li>
+    <li><button onclick={() => go(() => (ui.tech = { side: "buy" }))}><span class="m1">기술적 분석</span><span class="m2">기술적 지표로 매매 적합도 확인</span></button></li>
     <li><button onclick={() => go(() => (ui.add = {}))}><span class="m1">종목 추가</span><span class="m2">보유 등록 · 매수 시뮬 · 관심</span></button></li>
   </ul>
 </Sheet>
@@ -28,8 +28,9 @@
   .fab{
     position:fixed;right:max(16px,env(safe-area-inset-right));z-index:11;
     bottom:calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom));
-    width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;
-    display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,113,227,.35);
+    width:56px;height:56px;border-radius:50%;background:color-mix(in srgb,var(--accent) 82%,transparent);color:#fff;
+    border:1px solid color-mix(in srgb,#fff 42%,transparent);backdrop-filter:blur(18px) saturate(190%);-webkit-backdrop-filter:blur(18px) saturate(190%);
+    display:flex;align-items:center;justify-content:center;box-shadow:0 8px 26px color-mix(in srgb,var(--accent) 34%,transparent),inset 0 1px 0 rgba(255,255,255,.38);
   }
   .fab svg{width:24px;height:24px}
   .fab:focus-visible{outline:3px solid var(--ink);outline-offset:2px}

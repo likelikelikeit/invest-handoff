@@ -2,6 +2,7 @@
   // 시뮬 한 줄: 현재가 · ± 수량 · 비중 슬라이더 · 평가액/손익 · 제거. 기존 index.html의 .row 이식.
   // 슬라이더를 끄는 동안은 평단을 건드리지 않고 미리보기, 놓을 때 확정 (snap 패턴).
   import Logo from "./Logo.svelte";
+  import SelectField from "./SelectField.svelte";
   import { won, wonSigned, pctSigned, qtyStr, tone, tonePct, parseNum, usd } from "../lib/format.js";
   import { SECTOR_NAMES } from "../lib/calc/colors.js";
   import { qtyForWeight } from "../lib/calc/portfolio.js";
@@ -45,9 +46,8 @@
       <div class="nm1">{h.name}{#if h.baseQty === 0}<span class="tag">신규</span>{/if}</div>
       <div class="nm2">
         <span>{h.tick}</span><span>·</span>
-        <select class="secSel" value={h.sec} onchange={(e) => S.setSector(h.id, e.currentTarget.value)} aria-label="{h.name} 분류">
-          {#each SECTOR_NAMES as k (k)}<option value={k}>{k}</option>{/each}
-        </select>
+        <SelectField inline value={h.sec} onchange={(value) => S.setSector(h.id, value)} ariaLabel="{h.name} 분류"
+          options={SECTOR_NAMES.map((k) => ({ value: k, label: k }))} />
       </div>
     </div>
   </div>
@@ -107,7 +107,6 @@
   .nm1{font-size:15px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tag{font-size:11px;font-weight:600;color:var(--up);margin-left:6px}
   .nm2{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub2)}
-  .secSel{border:none;background:none;color:var(--sub2);font-size:12px;padding:0 2px;border-radius:5px;cursor:pointer;max-width:110px}
   .c-price{grid-area:price;display:flex;flex-direction:column;gap:2px}
   .c-qty{grid-area:qty;display:flex;flex-direction:column;gap:2px}
   .c-slider{grid-area:slider}

@@ -31,7 +31,7 @@
 </script>
 
 {#if !calls.length}
-  <p class="note">판정 기록이 없습니다. 위의 '지금 사도 될까'로 계기판을 보고 기록할 수 있습니다.</p>
+  <p class="note">기술적 분석 기록이 없습니다. 위의 매매 적합도 버튼에서 지표를 확인하고 기록할 수 있습니다.</p>
 {:else}
   <ul class="list">
     {#each calls as c (c.id)}

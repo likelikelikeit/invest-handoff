@@ -3,6 +3,7 @@
   // 계기판이다: 매수 여부를 판단하지 않고, 투자의견과 섞지 않고, 가격을 예측하지 않는다.
   import { untrack } from "svelte";
   import Sheet from "./Sheet.svelte";
+  import SelectField from "./SelectField.svelte";
   import { api } from "../lib/api.js";
   import { ui, toast } from "../lib/ui.svelte.js";
   import { data } from "../lib/data.svelte.js";
@@ -67,7 +68,7 @@
         side, rule_set_id: res.rule_set_id, price_at: res.price, label: res.label,
         indicators: res.indicators.map((x) => ({ key: x.key, value: x.value, verdict: x.verdict })), action,
       } });
-      toast("판정을 기록했습니다");
+      toast("기술적 분석을 기록했습니다");
       open = false;
       window.dispatchEvent(new CustomEvent("tech-changed"));
     } catch (e) {
@@ -81,10 +82,8 @@
 <Sheet bind:open title={name ? name + " · " + sideLabel(side) : sideLabel(side)} onclose={() => (ui.tech = null)}>
   {#if ui.tech && ui.tech.securityId == null}
     <label class="pick"><span>종목</span>
-      <select bind:value={sid} onchange={run}>
-        <option value={null} disabled>고르세요</option>
-        {#each held as h (h.id)}<option value={h.id}>{h.name}</option>{/each}
-      </select>
+      <SelectField bind:value={sid} onchange={run} ariaLabel="기술적 분석 종목"
+        options={held.map((h) => ({ value: h.id, label: h.name }))} />
     </label>
   {/if}
 
@@ -147,7 +146,7 @@
   {#snippet footer()}
     <div class="acts">
       <button class="btn" onclick={() => (open = false)}>닫기</button>
-      <button class="btn primary" onclick={save} disabled={busy || !res || !res.ok}>{busy ? "저장 중…" : "판정 기록"}</button>
+      <button class="btn primary" onclick={save} disabled={busy || !res || !res.ok}>{busy ? "저장 중…" : "분석 기록"}</button>
     </div>
   {/snippet}
 </Sheet>
@@ -155,7 +154,6 @@
 <style>
   .pick{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
   .pick span{font-size:12.5px;color:var(--sub)}
-  .pick select{min-height:44px;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 12px;font-size:16px}
   .sides,.seg{display:flex;gap:4px;padding:3px;border-radius:12px;background:var(--bg2)}
   .sides button,.seg button{flex:1;min-height:40px;border-radius:9px;font-size:14px;color:var(--sub)}
   .sides button.on,.seg button.on{background:var(--card);color:var(--ink);font-weight:620;box-shadow:0 1px 3px rgba(0,0,0,.12)}

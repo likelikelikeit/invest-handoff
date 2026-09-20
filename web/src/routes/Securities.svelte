@@ -2,7 +2,6 @@
   // 종목 탭: 보유 + 관심종목 목록, 검색으로 추가. 누르면 종목 상세.
   import PageHead from "../components/PageHead.svelte";
   import Gate from "../components/Gate.svelte";
-  import Section from "../components/Section.svelte";
   import Logo from "../components/Logo.svelte";
   import SecuritySearch from "../components/SecuritySearch.svelte";
   import { data, holdings, refreshQuotes } from "../lib/data.svelte.js";
@@ -15,6 +14,7 @@
   const colors = $derived(assignColors(held));
   let watch = $state([]);
   let q = $state("");
+  let mode = $state("held");
 
   async function loadWatch() {
     try {
@@ -59,26 +59,29 @@
 <Gate>
   <div class="search"><SecuritySearch bind:value={q} {onpick} id="sec-tab-search" label="종목 검색" placeholder="이름이나 티커로 찾기" /></div>
 
-  <Section id="sec-held" title="보유" note={held.length + "종목"}>
-    <ul class="list">
-      {#each held as h (h.id)}
-        {@const d = dayChange(h.ysym)}
-        <li>
-          <a href={"#/security/" + h.id}>
-            <Logo {h} color={colors.get(h.id)} />
-            <span class="nm"><span class="n1">{h.name}</span><span class="n2">{h.tick} · {h.sec}</span></span>
-            <span class="val">
-              <span class="v1 num">{h.stale ? "시세 없음" : priceStr(h)}</span>
-              {#if d != null}<span class="v2 num {tone(d * 100)}">{pctSigned(d)}</span>{/if}
-            </span>
-          </a>
-        </li>
-      {/each}
-    </ul>
-  </Section>
+  <div class="kind-tabs" role="tablist" aria-label="종목 목록">
+    <button role="tab" aria-selected={mode === "held"} class:on={mode === "held"} onclick={() => (mode = "held")}>보유 <span class="num">{held.length}</span></button>
+    <button role="tab" aria-selected={mode === "watch"} class:on={mode === "watch"} onclick={() => (mode = "watch")}>관심 <span class="num">{watch.length}</span></button>
+  </div>
 
-  <Section id="sec-watch" title="관심" note={watch.length ? watch.length + "종목" : ""}>
-    {#if watch.length}
+  <section class="list-section" aria-label={mode === "held" ? "보유 종목" : "관심 종목"}>
+    {#if mode === "held"}
+      <ul class="list">
+        {#each held as h (h.id)}
+          {@const d = dayChange(h.ysym)}
+          <li>
+            <a href={"#/security/" + h.id}>
+              <Logo {h} color={colors.get(h.id)} />
+              <span class="nm"><span class="n1">{h.name}</span><span class="n2">{h.tick} · {h.sec}</span></span>
+              <span class="val">
+                <span class="v1 num">{h.stale ? "시세 없음" : priceStr(h)}</span>
+                {#if d != null}<span class="v2 num {tone(d * 100)}">{pctSigned(d)}</span>{/if}
+              </span>
+            </a>
+          </li>
+        {/each}
+      </ul>
+    {:else if watch.length}
       <ul class="list">
         {#each watch as w (w.id)}
           {@const d = dayChange(w.ysym)}
@@ -86,23 +89,25 @@
             <a href={"#/security/" + w.security_id}>
               <Logo h={{ name: w.name, tick: w.ticker, mkt: w.market }} color={sectorColor("기타")} />
               <span class="nm"><span class="n1">{w.name}</span><span class="n2">{w.ticker}{w.note ? " · " + w.note : ""}</span></span>
-              <span class="val">
-                <span class="v1 num">{watchPrice(w)}</span>
-                {#if d != null}<span class="v2 num {tone(d * 100)}">{pctSigned(d)}</span>{/if}
-              </span>
+              <span class="val"><span class="v1 num">{watchPrice(w)}</span>{#if d != null}<span class="v2 num {tone(d * 100)}">{pctSigned(d)}</span>{/if}</span>
             </a>
             <button class="btn sm" onclick={() => unwatch(w)} aria-label="{w.name} 관심 해제">해제</button>
           </li>
         {/each}
       </ul>
-    {:else}
-      <p class="empty">위에서 검색해 관심 추가를 누르면 여기 모입니다.</p>
+    {:else}<p class="empty">위에서 검색해 관심 추가를 누르면 여기 모입니다.</p>
     {/if}
-  </Section>
+  </section>
 </Gate>
 
 <style>
-  .search{padding:6px 0 10px}
+  .search{padding:6px 0 14px}
+  .kind-tabs{display:flex;gap:4px;padding:3px;margin-bottom:8px;border-radius:13px;background:var(--bg2);width:min(100%,360px)}
+  .kind-tabs button{flex:1;min-height:40px;border-radius:10px;font-size:14px;color:var(--sub)}
+  .kind-tabs button.on{background:color-mix(in srgb,var(--card) 78%,transparent);color:var(--ink);font-weight:680;box-shadow:0 2px 10px rgba(0,0,0,.08);backdrop-filter:blur(16px) saturate(170%);-webkit-backdrop-filter:blur(16px) saturate(170%)}
+  .kind-tabs span{margin-left:4px;color:var(--sub2);font-size:12px}
+  .kind-tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .list-section{border-top:1px solid var(--line-soft);padding-top:3px}
   .list{list-style:none}
   .list li{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line-soft)}
   .list li:last-child{border-bottom:none}

@@ -10,13 +10,14 @@
   import MyViews from "../components/MyViews.svelte";
   import TechCalls from "../components/TechCalls.svelte";
   import RatingChip from "../components/RatingChip.svelte";
+  import SelectField from "../components/SelectField.svelte";
   import { upsideNow } from "../lib/calc/views.js";
   import { data, load, refreshQuotes } from "../lib/data.svelte.js";
   import { api } from "../lib/api.js";
   import { ui, askChanges, toast } from "../lib/ui.svelte.js";
   import { holdingFromPosition } from "../lib/calc/portfolio.js";
   import { assignColors, SECTOR_NAMES } from "../lib/calc/colors.js";
-  import { won, wonSigned, pctSigned, qtyStr, tone, parseNum, stamp, valueFmt } from "../lib/format.js";
+  import { won, wonSigned, pctSigned, qtyDisplay, qtyStr, tone, parseNum, stamp, valueFmt } from "../lib/format.js";
 
   let { id } = $props();
 
@@ -136,9 +137,9 @@
           {#if up != null}<span class="mv num {tone(up * 1e6)}">상승여력 {pctSigned(up * 100)}</span>{/if}
           <RatingChip rating={view.rating} score={view.rating_score} />
         {:else}
-          <span class="mv flat">의견 없음</span>
+          <span class="mv flat">커버리지 없음</span>
         {/if}
-        <button class="btn sm primary" onclick={() => (ui.viewForm = { securityId: id })}>새 의견 기록</button>
+        <button class="btn sm primary" onclick={() => (ui.viewForm = { securityId: id })}>{view ? "투자의견 업데이트" : "커버리지 개시"}</button>
       </div>
       <!-- 판정 계기판 (SPEC §5.6): 매수는 모든 종목, 매도는 보유 종목만 (사용자 결정) -->
       <div class="tech-btns">
@@ -161,11 +162,11 @@
         <Valuation {id} {sec} payload={fundamentals} quote={q} bind:metric={valuationMetric} />
       </Section>
 
-      <Section id="sd-views" title="내 의견" note={view ? "최근 " + stamp(view.created_at) : ""}>
+      <Section id="sd-views" title="투자의견 이력" note={view ? "최근 " + stamp(view.created_at) : ""}>
         <MyViews {id} fmt={valueFmt(sec)} />
       </Section>
 
-      <Section id="sd-tech" title="판정 기록" note="단기 부담 계기판 · 의견과 별개" defaultOpen={false}>
+      <Section id="sd-tech" title="기술적 분석 기록" note="매매 적합도 · 투자의견과 별개" defaultOpen={false}>
         <TechCalls {id} fmt={valueFmt(sec)} />
       </Section>
     {/if}
@@ -173,7 +174,7 @@
     {#if h}
       <Section id="sd-mine" title="내 보유">
         <dl class="mine">
-          <div><dt>수량</dt><dd class="num">{qtyStr(h.qty)}주</dd></div>
+          <div><dt>수량</dt><dd class="num">{qtyDisplay(h.qty)}주</dd></div>
           <div><dt>평단</dt><dd class="num">{won(h.avg)}</dd></div>
           <div><dt>평가액</dt><dd class="num">{won(h.qty * h.price)}</dd></div>
           <div><dt>평가손익</dt><dd class="num {tone((h.price - h.avg) * h.qty)}">{wonSigned((h.price - h.avg) * h.qty)} ({pctSigned(h.avg > 0 ? (h.price / h.avg - 1) * 100 : 0)})</dd></div>
@@ -190,14 +191,12 @@
     <Section id="sd-meta" title="종목 정보" defaultOpen={false}>
       <div class="edit">
         <label><span>자산군</span>
-          <select value={sec.asset_class} onchange={(e) => patch({ asset_class: e.currentTarget.value })}>
-            {#each Object.entries(ASSET_LABELS) as [value, label] (value)}<option {value}>{label}</option>{/each}
-          </select>
+          <SelectField value={sec.asset_class} onchange={(value) => patch({ asset_class: value })} ariaLabel="자산군"
+            options={Object.entries(ASSET_LABELS).map(([value, label]) => ({ value, label }))} />
         </label>
         <label><span>분류</span>
-          <select value={sec.sector || "기타"} onchange={(e) => patch({ sector: e.currentTarget.value })}>
-            {#each SECTOR_NAMES as k (k)}<option value={k}>{k}</option>{/each}
-          </select>
+          <SelectField value={sec.sector || "기타"} onchange={(value) => patch({ sector: value })} ariaLabel="종목 분류"
+            options={SECTOR_NAMES.map((k) => ({ value: k, label: k }))} />
         </label>
         <label><span>브랜드색</span>
           <input type="color" value={sec.brand_color || "#0071e3"} onchange={(e) => patch({ brand_color: e.currentTarget.value })} />
@@ -235,9 +234,9 @@
   .edit{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:14px}
   .edit label{display:flex;flex-direction:column;gap:5px;flex:1;min-width:120px}
   .edit span{font-size:12.5px;color:var(--sub)}
-  .edit input,.edit select{min-height:44px;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 12px;font-size:16px;width:100%}
+  .edit input{min-height:44px;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 12px;font-size:16px;width:100%}
   .edit input[type=color]{padding:4px;height:44px}
-  .edit input:focus,.edit select:focus{outline:none;border-color:var(--accent)}
+  .edit input:focus{outline:none;border-color:var(--accent)}
   .link{margin-top:12px;color:var(--red)}
   .hint{font-size:12.5px;color:var(--sub2);margin-top:10px}
   @media (min-width:900px){ .mine{grid-template-columns:repeat(4,1fr)} }

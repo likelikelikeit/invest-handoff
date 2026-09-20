@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { api, settings, ApiError, DEFAULT_API_BASE } from "./api.js";
-import { qtyStr, won, pct } from "./format.js";
+import { qtyDisplay, qtyStr, won, pct } from "./format.js";
 
 function fakeFetch(status, body, seen) {
   return async (url, init) => {
@@ -63,6 +63,12 @@ describe("format", () => {
     expect(qtyStr(4)).toBe("4");
     expect(qtyStr(6.000007)).toBe("6.000007");
     expect(qtyStr(0.0007691234)).toBe("0.000769");
+  });
+  it("qtyDisplay: 원본은 건드리지 않고 정수 근처 표시 오차만 숨긴다", () => {
+    expect(qtyDisplay(6.000007)).toBe("6");
+    expect(qtyDisplay(15.999968)).toBe("16");
+    expect(qtyDisplay(0.999994)).toBe("1");
+    expect(qtyDisplay(0.000769)).toBe("0.000769");
   });
   it("won: 축약 없이 전체", () => expect(won(13755714)).toBe("13,755,714원"));
   it("pct: 1% 이상 한 자리, 미만 두 자리", () => {

@@ -37,7 +37,7 @@
         <li class="none">
           <button onclick={() => (ui.viewForm = { securityId: h.id })}>
             <Logo {h} color={colors.get(h.id)} size={32} />
-            <span class="nm"><span class="n1">{h.name}</span><span class="n2">의견 없음 · 눌러서 기록</span></span>
+            <span class="nm"><span class="n1">{h.name}</span><span class="n2">커버리지 없음 · 눌러서 개시</span></span>
             <span class="up flat">+</span>
           </button>
         </li>

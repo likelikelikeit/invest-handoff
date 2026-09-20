@@ -303,7 +303,7 @@
   <div class="scenario-actions">
     {#if saved(activeScenario)}<button class="btn sm" onclick={removeScenario}>비우기</button>{/if}
     <button class="btn sm" onclick={saveScenario} disabled={busy}>{busy ? "저장 중…" : label(activeScenario) + " 저장"}</button>
-    {#if activeScenario === "base"}<button class="btn primary" onclick={openView}>이 가정으로 의견 기록</button>{/if}
+    {#if activeScenario === "base"}<button class="btn primary" onclick={openView}>이 가정으로 투자의견 작성</button>{/if}
   </div>
 {:else}
   <p class="empty">시나리오를 만들 TTM 재무가 부족합니다.</p>

@@ -1,5 +1,6 @@
 <script>
   // M8 포트폴리오 위험. 가정(기대수익률)과 계산값(변동성·상관)을 명확히 나눈다.
+  import InfoTip from "./InfoTip.svelte";
   import { pct } from "../lib/format.js";
 
   let { holdings, risk, loading = false, error = "", limits, warnings = [], editable = false, onExpected, onLimits } = $props();
@@ -16,7 +17,7 @@
     <div><dt>기대수익률 <em>내 가정</em></dt><dd class="num">{pct1(risk.expectedReturn)}</dd></div>
     <div><dt>변동성 <em>계산됨</em></dt><dd class="num">{pct1(risk.volatility)}</dd></div>
   </dl>
-  <p>최근 1년 일간 수익률의 공분산을 252거래일로 연환산합니다. 현금은 기대수익률·변동성 0으로 계산합니다.</p>
+  <div class="method"><span>계산 방법</span><InfoTip label="위험 계산 방법" text="최근 1년 일간 수익률의 공분산을 252거래일로 연환산합니다. 현금은 기대수익률과 변동성을 0으로 계산합니다." /></div>
 </div>
 
 {#if loading}<p class="note">가격 이력으로 위험을 계산하는 중…</p>{/if}
@@ -25,22 +26,24 @@
 {#if risk.volatility == null && !loading}<p class="note">종목별로 겹치는 일간 수익률이 20개 이상 있어야 변동성을 계산합니다.</p>{/if}
 
 {#if editable}
-  <div class="assumptions">
-    <h3>종목별 기대수익률 <span>연 %, 내 가정</span></h3>
-    {#each holdings as h (h.id)}
-      <label>
-        <span><b>{h.name}</b><small>{h.tick}</small></span>
-        <input class="num" type="number" min="-100" max="100" step="0.1" value={h.expectedReturnPct ?? ""}
-          placeholder="—" aria-label="{h.name} 기대수익률"
-          onchange={(e) => onExpected?.(h.id, e.currentTarget.value === "" ? null : Number(e.currentTarget.value))} />
-        <i>%</i>
-      </label>
-    {/each}
-  </div>
+  <details class="assumptions">
+    <summary><span>종목별 기대수익률</span><small>연 %, 내 가정</small><i aria-hidden="true">⌄</i></summary>
+    <div class="assumption-rows">
+      {#each holdings as h (h.id)}
+        <label>
+          <span><b>{h.name}</b><small>{h.tick}</small></span>
+          <input class="num" type="number" min="-100" max="100" step="0.1" value={h.expectedReturnPct ?? ""}
+            placeholder="—" aria-label="{h.name} 기대수익률"
+            onchange={(e) => onExpected?.(h.id, e.currentTarget.value === "" ? null : Number(e.currentTarget.value))} />
+          <i>%</i>
+        </label>
+      {/each}
+    </div>
+  </details>
 {/if}
 
 <div class="limits">
-  <h3>비중 상한 <span>초과해도 거래를 막지 않습니다</span></h3>
+  <h3>비중 상한</h3>
   <label><span>단일 종목</span><input class="num" type="number" min="1" max="100" value={limits.singlePct} onchange={(e) => saveLimit("singlePct", e)} /><i>%</i></label>
   <label><span>한 섹터</span><input class="num" type="number" min="1" max="100" value={limits.sectorPct} onchange={(e) => saveLimit("sectorPct", e)} /><i>%</i></label>
 </div>
@@ -68,11 +71,20 @@
   .headline dt{font-size:12.5px;color:var(--sub2)}
   .headline dt em,h3 span{font-style:normal;font-weight:500;color:var(--accent);margin-left:4px}
   .headline dd{font-size:28px;font-weight:700;letter-spacing:-.03em}
-  .headline p,.note{font-size:12.5px;color:var(--sub2);margin-top:7px;word-break:keep-all}
+  .note{font-size:12.5px;color:var(--sub2);margin-top:7px;word-break:keep-all}
+  .method{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:12px;color:var(--sub2)}
   .note.bad{color:var(--orange)}
   h3{font-size:14px;font-weight:650;margin-bottom:7px}
   h3 span{font-size:11.5px;color:var(--sub2)}
   .assumptions,.limits,.corr{padding-top:16px}
+  .assumptions{border-bottom:1px solid var(--line-soft);padding-bottom:7px}
+  .assumptions summary{display:flex;align-items:center;gap:7px;min-height:40px;cursor:pointer;list-style:none;font-size:14px;font-weight:650}
+  .assumptions summary::-webkit-details-marker{display:none}
+  .assumptions summary small{font-size:11.5px;font-weight:500;color:var(--sub2)}
+  .assumptions summary>i{margin-left:auto;font-style:normal;color:var(--sub2);transition:transform .18s}
+  .assumptions[open] summary>i{transform:rotate(180deg)}
+  .assumptions summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+  .assumption-rows{padding-top:4px}
   .assumptions label,.limits label,.corr div{display:flex;align-items:center;min-height:42px;border-bottom:1px solid var(--line-soft);gap:8px}
   .assumptions label > span,.limits label > span,.corr div > span{flex:1;min-width:0;font-size:13.5px}
   .assumptions b{font-weight:580}
@@ -86,5 +98,5 @@
   .warnings li{font-size:12.5px;padding:4px 0}
   .warnings strong{font-weight:650}
   .corr strong{font-size:14px}
-  @media (min-width:900px){.assumptions{columns:2;column-gap:36px}.assumptions h3{column-span:all}.assumptions label{break-inside:avoid}}
+  @media (min-width:900px){.assumption-rows{columns:2;column-gap:36px}.assumptions label{break-inside:avoid}}
 </style>

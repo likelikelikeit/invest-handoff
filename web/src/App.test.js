@@ -8,6 +8,6 @@ describe("App 스모크", () => {
     mount(App, { target });
     flushSync();
     const labels = [...target.querySelectorAll("nav a")].map((a) => a.textContent.trim());
-    expect(labels).toEqual(["홈", "종목", "포트폴리오", "의견", "더보기"]);
+    expect(labels).toEqual(["홈", "종목", "포트폴리오", "투자의견", "더보기"]);
   });
 });

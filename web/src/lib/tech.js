@@ -34,7 +34,7 @@ export function actionLabel(side, action) {
 }
 
 export function sideLabel(side) {
-  return side === "sell" ? "매도 판정" : "매수 판정";
+  return side === "sell" ? "매도 적합도" : "매수 적합도";
 }
 
 export const LABEL_TEXT = {

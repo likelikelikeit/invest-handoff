@@ -37,7 +37,7 @@
 {/if}
 
 <style>
-  .stamp{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--sub2)}
+  .stamp{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:7px;font-size:12.5px;color:var(--sub2)}
   .stamp span{flex:1;min-width:0}
   .err{font-size:12.5px;color:var(--orange);margin-top:4px}
 </style>

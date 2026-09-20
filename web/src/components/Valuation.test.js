@@ -17,7 +17,7 @@ vi.mock("lightweight-charts", () => {
 const Valuation = (await import("./Valuation.svelte")).default;
 
 describe("Valuation 스모크", () => {
-  it("두 밴드 형태와 base 의견 기록 동선을 한국어로 표시한다", () => {
+  it("두 밴드 형태와 base 투자의견 작성 동선을 한국어로 표시한다", () => {
     const ends = ["2024-12-31", "2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31"];
     const financials = [1, 2, 3, 4, 5].map((n) => ({
       period_end: ends[n - 1], period_type: "Q",
@@ -38,7 +38,7 @@ describe("Valuation 스모크", () => {
     expect(target.textContent).toContain("주가 밴드");
     expect(target.textContent).toContain("멀티플 분위");
     expect(target.textContent).toContain("내 가정");
-    expect(target.textContent).toContain("이 가정으로 의견 기록");
+    expect(target.textContent).toContain("이 가정으로 투자의견 작성");
     expect(target.querySelector('[aria-label="목표 배수"]')).toBeTruthy();
   });
 
@@ -54,7 +54,7 @@ describe("Valuation 스모크", () => {
     expect(target.textContent).toContain("통화·주식 단위 환산이 필요합니다");
     expect(target.textContent).toContain("재무는 TWD, 주가는 USD 기준");
     expect(target.textContent).toContain("ADR 1주는 보통주 5주");
-    expect(target.textContent).not.toContain("이 가정으로 의견 기록");
+    expect(target.textContent).not.toContain("이 가정으로 투자의견 작성");
   });
 
   it("ADR 재무의 최신 분기가 USD로 정규화되면 밸류에이션을 다시 연다", () => {

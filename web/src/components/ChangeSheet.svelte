@@ -4,7 +4,7 @@
   import Sheet from "./Sheet.svelte";
   import { api } from "../lib/api.js";
   import { ui, toast } from "../lib/ui.svelte.js";
-  import { qtyStr } from "../lib/format.js";
+  import { qtyDisplay } from "../lib/format.js";
 
   const CHOICES = [
     { key: "buy", label: "매수" },
@@ -58,7 +58,7 @@
       <li>
         <div class="top">
           <span class="nm">{c.name}</span>
-          <span class="q num">{qtyStr(c.qty_before)} → {qtyStr(c.qty_after)}주</span>
+          <span class="q num">{qtyDisplay(c.qty_before)} → {qtyDisplay(c.qty_after)}주</span>
         </div>
         <div class="seg" role="radiogroup" aria-label="{c.name} 변화 이유">
           {#each CHOICES as ch (ch.key)}

@@ -3,6 +3,7 @@
   import PageHead from "../components/PageHead.svelte";
   import Gate from "../components/Gate.svelte";
   import EventList from "../components/EventList.svelte";
+  import SelectField from "../components/SelectField.svelte";
   import { api } from "../lib/api.js";
   import { data } from "../lib/data.svelte.js";
   import { toast } from "../lib/ui.svelte.js";
@@ -95,10 +96,9 @@
       <label><span>시각 (KST, 선택)</span><input type="time" bind:value={form.time} /></label>
       <label class="wide"><span>제목</span><input bind:value={form.title} placeholder="예: 삼성전자 3분기 잠정실적" /></label>
       <label class="wide"><span>종목 (선택)</span>
-        <select bind:value={form.security_id}>
-          <option value="">없음</option>
-          {#each held as h (h.id)}<option value={String(h.id)}>{h.name}</option>{/each}
-        </select>
+        <SelectField bind:value={form.security_id} ariaLabel="일정 종목" options={[
+          { value: "", label: "없음" }, ...held.map((h) => ({ value: String(h.id), label: h.name })),
+        ]} />
       </label>
     </div>
     {#if err}<p class="msg bad">{err}</p>{/if}
@@ -116,7 +116,7 @@
   .form .wide{grid-column:1/-1}
   .form label{display:flex;flex-direction:column;gap:5px}
   .form span{font-size:12.5px;color:var(--sub)}
-  .form input,.form select{min-height:44px;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 12px;font-size:16px}
-  .form input:focus,.form select:focus{outline:none;border-color:var(--accent)}
+  .form input{min-height:44px;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 12px;font-size:16px}
+  .form input:focus{outline:none;border-color:var(--accent)}
   .acts{display:flex;justify-content:flex-end;margin-top:12px}
 </style>

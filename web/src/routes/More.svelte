@@ -6,7 +6,8 @@
   import { load } from "../lib/data.svelte.js";
   import { ui } from "../lib/ui.svelte.js";
   import { setTheme, themeMode } from "../lib/theme.js";
-  import { qtyStr } from "../lib/format.js";
+  import { appearance, setAssetSplit } from "../lib/appearance.svelte.js";
+  import { qtyDisplay } from "../lib/format.js";
 
   let apiBase = $state(settings.apiBase);
   let token = $state(settings.token);
@@ -70,7 +71,7 @@
   <ul class="menu">
     <li><a class="mlink" href="#/more/calendar"><span class="m1">일정</span><span class="m2">FOMC·금통위·CPI·실적 발표, 직접 추가</span></a></li>
     <li><a class="mlink" href="#/more/macro"><span class="m1">거시</span><span class="m2">한·미 기준금리, 금리 경로, 점도표 입력</span></a></li>
-    <li><a class="mlink" href="#/more/rules"><span class="m1">판정 규칙</span><span class="m2">매수·매도 계기판의 과열·침체 기준과 가중치 (버전 이력)</span></a></li>
+    <li><a class="mlink" href="#/more/rules"><span class="m1">기술적 분석 규칙</span><span class="m2">매매 적합도의 과열·침체 기준과 가중치, 버전 이력</span></a></li>
     <li><button onclick={() => (ui.importOpen = true)} disabled={!settings.token}>
       <span class="m1">스크린샷 가져오기</span><span class="m2">증권사 보유 화면 캡처로 보유 갱신</span>
     </button></li>
@@ -105,7 +106,7 @@
           <li>
             <span class="name">{p.security.name}</span>
             <span class="tick">{p.security.ticker}</span>
-            <span class="qty num">{qtyStr(p.qty)}주</span>
+            <span class="qty num">{qtyDisplay(p.qty)}주</span>
           </li>
         {/each}
       </ul>
@@ -118,6 +119,23 @@
       {#each [["system", "시스템"], ["light", "라이트"], ["dark", "다크"]] as [k, l] (k)}
         <button role="radio" aria-checked={theme === k} class:on={theme === k} onclick={() => pickTheme(k)}>{l}</button>
       {/each}
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="asset-style-title">
+    <h2 id="asset-style-title">자산 비중 표시</h2>
+    <div class="seg" role="radiogroup" aria-label="자산 비중 표시 방식">
+      {#each [["compact", "기본"], ["labels", "분할 라벨"]] as [k, l] (k)}
+        <button role="radio" aria-checked={appearance.assetSplit === k} class:on={appearance.assetSplit === k} onclick={() => setAssetSplit(k)}>{l}</button>
+      {/each}
+    </div>
+    <div class="asset-preview" class:labels={appearance.assetSplit === "labels"} aria-hidden="true">
+      <div class="pbar"><i></i><i></i><i></i></div>
+      {#if appearance.assetSplit === "labels"}
+        <div class="plabels"><span>해외<b>48%</b></span><span>국내<b>32%</b></span><span>현금<b>20%</b></span></div>
+      {:else}
+        <div class="plegend"><span>해외 48%</span><span>국내 32%</span><span>현금 20%</span></div>
+      {/if}
     </div>
   </section>
 
@@ -160,4 +178,8 @@
   .seg button{min-height:40px;padding:0 18px;border-radius:9px;font-size:14px;color:var(--sub)}
   .seg button.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
   .seg button:focus-visible{outline:2px solid var(--accent)}
+  .asset-preview{max-width:440px;margin-top:14px;padding:12px 0 4px}
+  .pbar{display:flex;height:7px;border-radius:99px;overflow:hidden}.pbar i:nth-child(1){width:48%;background:#e83050}.pbar i:nth-child(2){width:32%;background:#1768e8}.pbar i:nth-child(3){width:20%;background:var(--cash-usd)}
+  .plegend{display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--sub2)}
+  .plabels{display:grid;grid-template-columns:48fr 32fr 20fr;margin-top:8px;font-size:12px}.plabels span{display:flex;flex-direction:column}.plabels span:nth-child(1){color:#e83050}.plabels span:nth-child(2){color:#1768e8}.plabels span:nth-child(3){color:var(--sub2)}.plabels b{font-size:14px}.plabels span:last-child{text-align:right}
 </style>

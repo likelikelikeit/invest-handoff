@@ -3,6 +3,8 @@
   import { untrack } from "svelte";
   import Sheet from "./Sheet.svelte";
   import SecuritySearch from "./SecuritySearch.svelte";
+  import SelectField from "./SelectField.svelte";
+  import InfoTip from "./InfoTip.svelte";
   import { api } from "../lib/api.js";
   import { ui, askChanges, toast } from "../lib/ui.svelte.js";
   import { data, load, quoteOne, holdings, cash } from "../lib/data.svelte.js";
@@ -125,7 +127,7 @@
     <label><span>티커</span><input bind:value={f.tick} placeholder="005930" autocomplete="off" /></label>
     <label><span>야후 심볼</span><input bind:value={f.ysym} placeholder="자동" autocomplete="off" /></label>
     <label class="full"><span>분류</span>
-      <select bind:value={f.sec}>{#each SECTOR_NAMES as k (k)}<option value={k}>{k}</option>{/each}</select>
+      <SelectField bind:value={f.sec} ariaLabel="종목 분류" options={SECTOR_NAMES.map((k) => ({ value: k, label: k }))} />
     </label>
     <label><span>현재가(원)</span><input class="num" bind:value={f.price} inputmode="numeric" placeholder={priceNote || "259500"} /></label>
     <label><span>평단(원)</span><input class="num" bind:value={f.avg} inputmode="numeric" placeholder="현재가와 같으면 비움" /></label>
@@ -133,7 +135,7 @@
   </div>
   {#if priceNote}<p class="msg">{priceNote}</p>{/if}
   {#if err}<p class="msg bad">{err}</p>{/if}
-  <p class="hint">보유 등록은 원래 갖고 있던 종목(총자산에 포함, 현금 변화 없음), 매수 시뮬은 현금을 써서 새로 담는 연습입니다.</p>
+  <div class="help"><span>등록 방식</span><InfoTip label="등록 방식 설명" text="보유 등록은 원래 갖고 있던 종목을 총자산에 포함하며 현금은 바꾸지 않습니다. 매수 시뮬은 실제 보유를 건드리지 않고 현재 현금으로 새 종목을 담아보는 연습입니다." /></div>
 
   {#snippet footer()}
     <div class="acts">
@@ -150,9 +152,9 @@
   .full{grid-column:1/-1}
   label{display:flex;flex-direction:column;gap:5px;min-width:0}
   label span{font-size:12.5px;color:var(--sub)}
-  input,select{min-height:44px;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 12px;font-size:16px;width:100%}
-  input:focus,select:focus{outline:none;border-color:var(--accent)}
-  .hint{font-size:12.5px;color:var(--sub2);margin-top:12px;word-break:keep-all}
+  input{min-height:44px;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 12px;font-size:16px;width:100%}
+  input:focus{outline:none;border-color:var(--accent)}
+  .help{display:flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;color:var(--sub2)}
   .msg{margin-top:10px}
   .acts{display:flex;gap:8px;flex-wrap:wrap}
   .sp{flex:1}

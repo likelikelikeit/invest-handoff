@@ -3,6 +3,8 @@
   // 저장하면 서버가 지금 가격·상승여력을 얼린다. 편집은 스냅샷을 바꾸지 않고 '수정됨'이 붙는다.
   import { untrack } from "svelte";
   import Sheet from "./Sheet.svelte";
+  import InfoTip from "./InfoTip.svelte";
+  import SelectField from "./SelectField.svelte";
   import { api } from "../lib/api.js";
   import { ui, toast } from "../lib/ui.svelte.js";
   import { data, loadViews, nativePrice, refreshQuotes } from "../lib/data.svelte.js";
@@ -64,6 +66,8 @@
   const fmt = $derived(sec ? valueFmt({ ...sec, asset_class: sec.asset_class || "equity" }) : (v) => String(v));
   const target = $derived(parseNum(f.target));
   const upside = $derived(price > 0 && target > 0 ? (target / price - 1) * 100 : null);
+  const previous = $derived(!edit && sid != null ? data.views.find((v) => v.security_id === sid) : null);
+  const formTitle = $derived(edit ? "기록 편집" : previous ? "투자의견 업데이트" : "커버리지 개시");
 
   async function save() {
     if (sid == null) return (err = "종목을 고르세요");
@@ -78,7 +82,7 @@
         toast("의견을 수정했습니다");
       } else {
         await api("/views", { method: "POST", body: { security_id: sid, ...body, ...(ui.viewForm?.valuation ? { valuation: ui.viewForm.valuation } : {}) } });
-        toast((sec?.name || "") + " 의견을 기록했습니다");
+        toast((sec?.name || "") + (previous ? " 투자의견을 업데이트했습니다" : " 커버리지를 개시했습니다"));
       }
       open = false;
       await loadViews();
@@ -90,20 +94,19 @@
   }
 </script>
 
-<Sheet bind:open title={edit ? "의견 편집" : "새 의견 기록"} onclose={() => (ui.viewForm = null)}>
+<Sheet bind:open title={formTitle} onclose={() => (ui.viewForm = null)}>
   <div class="form">
     {#if edit}
       <p class="lead">{edit.name} · {stamp(edit.created_at)} 기록 · 기록 시점 가격 {fmt(edit.price_at)}은 그대로 두고 '수정됨'이 붙습니다.</p>
     {:else if ui.viewForm && ui.viewForm.securityId == null}
       <label class="full"><span>종목</span>
-        <select bind:value={sid}>
-          <option value={null} disabled>고르세요</option>
-          {#each choices as c (c.id)}<option value={c.id}>{c.name} · {c.ticker}</option>{/each}
-        </select>
-        <em>다른 종목은 종목 화면에서 새 의견 기록을 누르세요</em>
+        <SelectField bind:value={sid} options={choices.map((c) => ({ value: c.id, label: c.name + " · " + c.ticker }))} ariaLabel="투자의견 종목" />
+        <em>다른 종목은 종목 화면에서 커버리지를 개시할 수 있습니다.</em>
       </label>
     {:else if sec}
-      <p class="lead">{sec.name} · 지금 {price != null ? fmt(price) : "시세 없음"} (저장하는 순간의 가격이 기록됩니다)</p>
+      <p class="lead">{sec.name} · 현재가 {price != null ? fmt(price) : "시세 없음"}
+        <InfoTip label="가격 기록 방식" text="저장하는 순간 앱이 확인한 지연 현재가를 기록 시점 가격으로 고정합니다. 이후 가격이 바뀌어도 이 값은 바뀌지 않습니다." />
+      </p>
     {/if}
 
     <fieldset class="full">
@@ -142,7 +145,7 @@
   {#snippet footer()}
     <div class="acts">
       <button class="btn" onclick={() => (open = false)}>취소</button>
-      <button class="btn primary" onclick={save} disabled={busy}>{busy ? "저장 중…" : edit ? "수정" : "기록"}</button>
+      <button class="btn primary" onclick={save} disabled={busy}>{busy ? "저장 중…" : edit ? "수정" : previous ? "업데이트" : "커버리지 개시"}</button>
     </div>
   {/snippet}
 </Sheet>
@@ -150,15 +153,15 @@
 <style>
   .form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
   .full{grid-column:1/-1}
-  .lead{grid-column:1/-1;font-size:14px;color:var(--sub);word-break:keep-all}
+  .lead{grid-column:1/-1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:14px;color:var(--sub);word-break:keep-all}
   label,fieldset{display:flex;flex-direction:column;gap:6px;min-width:0;border:none}
   label > span,legend{font-size:12.5px;color:var(--sub);margin-bottom:2px}
   em{font-style:normal;font-size:12.5px;color:var(--sub2)}
   em.up{color:var(--up)} em.down{color:var(--down)}
-  input,select,textarea{border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 12px;font-size:16px;width:100%;font-family:inherit;color:inherit}
-  input,select{min-height:44px}
+  input,textarea{border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 12px;font-size:16px;width:100%;font-family:inherit;color:inherit}
+  input{min-height:44px}
   textarea{resize:vertical;line-height:1.5}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  input:focus,textarea:focus{outline:none;border-color:var(--accent)}
   .ratings{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
   .rt{min-height:44px;border:1px solid var(--line);border-radius:12px;font-size:14px;font-weight:560}
   .rt.on.up{background:var(--up);border-color:var(--up);color:#fff}

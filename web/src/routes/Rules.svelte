@@ -67,7 +67,7 @@
   }
 </script>
 
-<PageHead title="판정 규칙">
+<PageHead title="기술적 분석 규칙">
   <a class="btn sm" href="#/more">‹ 더보기</a>
 </PageHead>
 

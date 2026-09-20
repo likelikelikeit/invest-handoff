@@ -26,6 +26,12 @@ export function qtyStr(q) {
   return String(parseFloat(q.toFixed(6)));
 }
 
+/** 화면 표시용 수량. 계산·입력 원본은 보존하고 정수에 매우 가까운 가져오기 오차만 숨긴다. */
+export function qtyDisplay(q) {
+  if (Math.abs(q - Math.round(q)) < 1e-4) return String(Math.round(q));
+  return qtyStr(q);
+}
+
 export function usd(n) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
