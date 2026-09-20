@@ -91,7 +91,7 @@
 야후 quoteSummary와 네이버는 비공식이라 언제든 깨질 수 있다. 소스 어댑터를 `worker/src/sources/*.js`로 분리해 교체 지점을 한 곳으로 모은다 [제안].
 
 ### 2.3 미래에 붙을 것 (지금은 만들지 않음)
-- **MCP 서버** (마일스톤 9): 읽기 툴 3개 `get_portfolio`, `get_investment_views`, `get_company_view`로 시작. 쓰기는 `add_note` 정도만. Cloudflare의 원격 MCP 호스팅 + OAuth 사용. Claude Pro 커스텀 커넥터로 연결.
+- ~~**MCP 서버**~~ → 마일스톤 9에서 만들었다. `mcp/`의 별도 Worker `invest-mcp`, 읽기 툴 6개, OAuth는 직접 구현(§7.7). 쓰기 툴(`add_note` 등)은 여전히 안 만든다.
 - **Cloudflare Pages + Access**: 프론트를 옮겨 사이트와 API를 한 도메인으로 묶고 구글 로그인으로 잠금.
 - **증권사 API**(토스증권/KIS): 잔고 자동 동기화. Worker에 `/balance` 경로 추가 → §5.1의 `normalize`/`merge`에 넘기면 끝.
 - **거래 이력(transactions) 테이블**: 보류. §5.1의 "변화 감지 질문"으로 대체.
@@ -574,6 +574,10 @@ CREATE TABLE meta (
 │  ├ src/sources/      yahoo.js (chart, quoteSummary+crumb, search), naver.js, dart.js, fred.js, ecos.js
 │  ├ src/cron/         daily_kr.js, daily_us.js, weekly.js, evaluate.js
 │  └ src/calc/         서버에서도 쓰는 계산 (web/src/lib/calc와 공유 가능하면 패키지로)
+├ mcp/                 MCP 서버 Worker (invest-mcp). 마이그레이션은 worker/migrations를 쓴다
+│  ├ src/oauth.js      인가 서버 (동적 등록·PKCE·토큰)
+│  ├ src/mcp.js        JSON-RPC (initialize / tools/list / tools/call)
+│  └ src/tools.js      읽기 툴 6개
 └ .github/workflows/pages.yml
 ```
 
@@ -664,6 +668,14 @@ CREATE TABLE meta (
 - **오프라인**: 서비스 워커가 앱 셸과 같은 출처 정적 자산을 캐시하고, API 래퍼가 성공한 GET JSON을 토큰별 Cache API 키에 저장한다. 네트워크 연결 실패 시 마지막 응답을 쓰고 화면 상단과 시세 기준에 “오프라인”을 표시한다.
 - **의견 사후평가**: 미국장 일일 크론에서 미평가 의견을 최대 100개씩 D1 쿼리 3개로 처리한다. 기간 안의 일중 high/low로 목표 도달을 판정하고, 목표 시점 이하 마지막 거래일 종가로 실제수익률·MAE를 채운다.
 
+마일스톤 9에서 정한 것 (2026-09-20):
+- **별도 Worker**: MCP 서버는 `invest-api`에 붙이지 않고 `mcp/`의 새 Worker `invest-mcp`로 뒀다. 같은 D1을 읽지만 인증 방식(OAuth)과 수명주기가 달라서, 한쪽 배포가 다른 쪽을 흔들지 않게 한다. 마이그레이션은 `worker/migrations` 한 곳에서만 돌린다.
+- **OAuth 직접 구현** (§7.7): 외부 인가 서버나 Durable Object를 쓰지 않는다. 동적 등록(RFC 7591) + 인가 코드 + PKCE S256, 접근 토큰 30일·갱신 토큰 180일(회전), 토큰은 SHA-256 해시만 저장. 로그인은 새 계정 대신 이미 있는 `APP_TOKEN`을 붙여넣는 화면 하나.
+- **상태 없는 Streamable HTTP**: 세션(Mcp-Session-Id)도 서버발 SSE 스트림도 쓰지 않아서 Durable Object가 필요 없다(무료 플랜). `POST /mcp` 하나에 `initialize`/`tools/list`/`tools/call`, `GET /mcp`는 405.
+- **읽기 툴 6개**: SPEC §2.3의 3개(`get_portfolio`, `get_investment_views`, `get_company_view`)에 `get_calendar`, `get_macro`, `get_tech_calls`를 더했다. 대화에서 "다음 주에 뭐 있어?", "내 판정 맞았어?"를 바로 답하려면 필요했다. 전부 읽기 전용이고 쓰기 툴은 없다.
+- **계산은 툴이 한다**: 비중·수익률·TTM·PER·1년 전 대비 변화까지 코드가 계산해서 넘기고, `instructions`로 모델에게 다시 계산하지 말라고 못박는다(AGENTS 규칙 "LLM은 계산하지 않는다"의 연장).
+- **판정 분리 유지**: `get_tech_calls` 응답에 "투자의견·성과평가와 섞지 말고 예측형 조언을 만들지 말라"는 규칙 문구를 같이 넣는다.
+
 ### 7.2 인증 [확정: 1차]
 - Worker 시크릿 `APP_TOKEN`(긴 무작위 문자열). 모든 API 요청에 `Authorization: Bearer <token>`. 없거나 틀리면 401.
 - 프론트: 설정 화면에서 토큰 붙여넣기 → localStorage. 기기마다 한 번.
@@ -702,6 +714,12 @@ CREATE TABLE meta (
 - 절대 커밋 금지: `portfolio.json`(사용자 실제 보유 데이터), `.dev.vars`, 토큰, API 키.
 - Worker 시크릿: `APP_TOKEN`, `ANTHROPIC_API_KEY`, `DART_API_KEY`, `FRED_API_KEY`, `ECOS_API_KEY`. Brandfetch client ID는 공개 가능하므로 프론트 vars.
 
+### 7.8 MCP 서버 (invest-mcp)
+- 주소 `https://invest-mcp.hyungjin0416.workers.dev`. Claude 커스텀 커넥터에는 `/mcp`를 등록한다.
+- 경로: `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`(자원 경로가 붙어 와도 받는다), `POST /register`, `GET·POST /authorize`, `POST /token`, `POST /mcp`, `GET /health`.
+- 시크릿은 `APP_TOKEN` 하나. `invest-api`와 같은 값이어야 한다(앱에서 쓰는 그 토큰).
+- 저장소: `mcp_clients`, `mcp_auth_codes`, `mcp_tokens` (마이그레이션 `0007`). 투자 데이터에는 쓰지 않는다.
+
 ---
 
 ## 8. 구현 순서 (마일스톤) [확정]
@@ -720,7 +738,7 @@ CREATE TABLE meta (
 | 6 | 매수·매도 판정: 5지표 계산, 규칙 편집 화면(버전), 시트 UI, 기록, 1w/1m 크론 | 종목 상세에서 판정 버튼이 동작 |
 | 7 | 일정·거시: FOMC 등 시드, 어닝일 크론, FRED·ECOS, 금리 경로 그래프, 홈 블록 완성 | 홈 다섯 블록 전부 실데이터 |
 | 8 | 자산군 층, 기대수익률·변동성·상관, 제약 경고, PWA 오프라인 캐시, 의견 사후평가 크론 완성 | 포트폴리오 탭에 변동성이 보이고 지하철에서 앱이 열림 |
-| 9 | MCP 읽기 툴 3개 (Cloudflare 원격 MCP + OAuth), Claude 커스텀 커넥터 연결 | Claude 앱에서 "내 투자의견" 치면 답이 옴 |
+| 9 | MCP 읽기 툴 6개 (별도 Worker `invest-mcp` + 직접 구현한 OAuth), Claude 커스텀 커넥터 연결 | Claude 앱에서 "내 투자의견" 치면 답이 옴 |
 
 이후: Cloudflare Pages + Access 이전, 초과수익 벤치마크, 증권사 API 연동, 브리핑 생성.
 
