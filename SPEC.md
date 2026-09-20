@@ -719,6 +719,7 @@ CREATE TABLE meta (
 - 경로: `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`(자원 경로가 붙어 와도 받는다), `POST /register`, `GET·POST /authorize`, `POST /token`, `POST /mcp`, `GET /health`.
 - 시크릿은 `APP_TOKEN` 하나. `invest-api`와 같은 값이어야 한다(앱에서 쓰는 그 토큰).
 - 저장소: `mcp_clients`, `mcp_auth_codes`, `mcp_tokens` (마이그레이션 `0007`). 투자 데이터에는 쓰지 않는다.
+- 2026-09-20 확인: Claude와 ChatGPT 양쪽에서 커스텀 커넥터로 붙어 동작했다. 특정 클라이언트에 맞춘 구현이 아니라 표준(RFC 7591·8414·9728 + PKCE)만 따른 결과다.
 
 ---
 
