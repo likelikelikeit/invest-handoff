@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { TOOL_BY_NAME } from "../src/tools.js";
+import { TOOL_BY_NAME } from "../src/mcp.js";
 import { seed, env as makeEnv, dayAgo } from "./seed.js";
 
 let env;

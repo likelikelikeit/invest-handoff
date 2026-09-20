@@ -9,6 +9,7 @@
   import ViewsBlock from "../components/ViewsBlock.svelte";
   import UpcomingBlock from "../components/UpcomingBlock.svelte";
   import MacroBlock from "../components/MacroBlock.svelte";
+  import DraftsBlock from "../components/DraftsBlock.svelte";
   import { ui } from "../lib/ui.svelte.js";
   import { data, holdings, cash } from "../lib/data.svelte.js";
 </script>
@@ -17,6 +18,11 @@
 
 <Gate>
   <QuoteStamp />
+  {#if data.drafts.length}
+    <Section id="home-drafts" title="가져오기 대기" note="{data.drafts.length}건 · 반영하면 앱에 들어갑니다">
+      <DraftsBlock />
+    </Section>
+  {/if}
   {#if data.market.length}
     <Section id="home-market" title="시장">
       <MarketStrip />

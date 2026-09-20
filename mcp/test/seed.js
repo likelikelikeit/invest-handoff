@@ -50,7 +50,7 @@ export function seed() {
     "INSERT INTO financials (security_id, period_end, period_type, revenue, operating_income, net_income, eps, bps, source, fetched_at) " +
     "VALUES (?, ?, 'Q', ?, ?, ?, ?, ?, 'sec', ?)"
   );
-  ["2025-12-31", "2026-03-31", "2026-06-30", "2026-09-30"].forEach((p, i) =>
+  ["2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30"].forEach((p, i) =>
     fin.run(nvda, p, 1000 + i * 100, 400, 300 + i * 10, 1 + i * 0.1, 20, at));
   db.raw.prepare(
     "INSERT INTO estimates (security_id, source, as_of, fiscal_year, eps, target_price, rating_mean, n_analysts) " +

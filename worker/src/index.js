@@ -19,6 +19,7 @@ import { listValuationScenarios, saveValuationScenario, deleteValuationScenario 
 import { getRules, listRules, saveRules, getTech, createCall, patchCall, listCalls } from "./routes/tech.js";
 import { listEvents, createEvent, deleteEvent, getMacro, saveDots, refreshMacro } from "./routes/calendar.js";
 import { runMisc, CRON_MISC } from "./cron/misc.js";
+import { listDrafts, applyDraft, discardDraft } from "./routes/drafts.js";
 
 const ID = "(?<id>\\d+)";
 
@@ -75,6 +76,10 @@ const ROUTES = [
   ["GET", "/macro", getMacro],
   ["POST", "/macro/dots", saveDots],
   ["POST", "/macro/refresh", refreshMacro],
+
+  ["GET", "/drafts", listDrafts],
+  ["POST", "/drafts/" + ID + "/apply", applyDraft],
+  ["POST", "/drafts/" + ID + "/discard", discardDraft],
 
   ["GET", "/prices/" + ID, getPrices],
   ["POST", "/prices/" + ID + "/backfill", backfillPrices],

@@ -162,10 +162,15 @@ export async function deleteScenario(request, env, headers, p) {
  */
 export async function mergePortfolio(request, env, headers) {
   const body = await readJson(request);
-  const rows = Array.isArray(body.rows) ? body.rows : null;
+  const r = await mergeRows(env, body.rows, body.asOwned !== false);
+  return json({ ok: true, ...r }, 200, headers);
+}
+
+/** merge의 알맹이. /portfolio/merge와 초안 승인(§7.9)이 같이 쓴다. */
+export async function mergeRows(env, rowsIn, asOwned) {
+  const rows = Array.isArray(rowsIn) ? rowsIn : null;
   if (!rows || !rows.length) throw new HttpError(400, "rows가 비어 있습니다");
   if (rows.length > 100) throw new HttpError(400, "한 번에 100행까지 받습니다");
-  const asOwned = body.asOwned !== false;
   const at = nowIso();
 
   const parsed = rows.map((r, i) => {
@@ -191,5 +196,5 @@ export async function mergePortfolio(request, env, headers) {
     ));
   }
   const added = parsed.filter((x) => !existing.has(x.sec.ysym)).length;
-  return json({ ok: true, added, updated: parsed.length - added, ids, changes }, 200, headers);
+  return { added, updated: parsed.length - added, ids, changes };
 }

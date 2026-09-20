@@ -4,7 +4,8 @@
   import Sheet from "./Sheet.svelte";
   import { api } from "../lib/api.js";
   import { ui, askChanges, toast } from "../lib/ui.svelte.js";
-  import { data, load } from "../lib/data.svelte.js";
+  import { untrack } from "svelte";
+  import { data, load, loadDrafts } from "../lib/data.svelte.js";
   import { normalize, toMergeRow } from "../lib/calc/normalize.js";
   import { won, qtyStr } from "../lib/format.js";
 
@@ -14,14 +15,33 @@
   let busy = $state(false);
   let over = $state(false);
   let fileIn = $state();
+  // MCP 초안을 확인하는 모드 (SPEC §7.9). null이면 평소의 스크린샷 가져오기.
+  let draft = $state(null);
 
   $effect(() => {
-    if (ui.importOpen) {
+    const req = ui.importOpen;
+    if (!req) return;
+    untrack(() => {
       open = true;
       parsed = [];
       msg = { text: "", bad: false };
-    }
+      draft = req && req.draftId ? req : null;
+      if (draft) fromRows(draft.rows);
+    });
   });
+
+  /** 이미 읽힌 행(초안)을 미리보기로. 정규화·종목 잇기는 스크린샷 경로와 같은 함수를 쓴다. */
+  function fromRows(rows) {
+    parsed = rows.map((raw) => {
+      const n = normalize(raw, data.fx);
+      return { raw, n, pick: !!n, ...(n ? attachKnown(n, raw) : {}) };
+    });
+    const good = parsed.filter((p) => p.n).length;
+    // 전부 읽혔으면 굳이 말하지 않는다. 표가 이미 보인다.
+    msg = good === parsed.length
+      ? { text: "", bad: false }
+      : { text: parsed.length + "줄 중 " + good + "줄만 쓸 수 있습니다. 나머지는 대화에서 다시 확인해 주세요.", bad: true };
+  }
 
   // 큰 캡처는 줄여서 보낸다. 토큰도 아끼고 워커 CPU 한도에도 안 걸린다
   function shrink(file) {
@@ -85,11 +105,14 @@
     if (!rows.length) return (msg = { text: "선택된 종목이 없습니다.", bad: true });
     busy = true;
     try {
-      const r = await api("/portfolio/merge", { method: "POST", body: { asOwned: true, rows } });
+      const r = draft
+        ? await api("/drafts/" + draft.draftId + "/apply", { method: "POST", body: { rows, cash: draft.cash || [] } })
+        : await api("/portfolio/merge", { method: "POST", body: { asOwned: true, rows } });
       open = false;
       await load();
-      toast("가져왔습니다. 새 종목 " + r.added + "개, 갱신 " + r.updated + "개");
+      toast("가져왔습니다. 새 종목 " + r.added + "개, 갱신 " + r.updated + "개" + (r.cash ? ", 현금 " + r.cash + "건" : ""));
       askChanges(r.changes);
+      if (draft) await loadDrafts();
     } catch (e) {
       msg = { text: "실패: " + e.message, bad: true };
     } finally {
@@ -107,7 +130,10 @@
 
 <svelte:window {onpaste} />
 
-<Sheet bind:open title="스크린샷 가져오기" onclose={() => (ui.importOpen = false)}>
+<Sheet bind:open title={draft ? "가져오기 확인" : "스크린샷 가져오기"} onclose={() => (ui.importOpen = false)}>
+  {#if draft}
+    <p class="from">{(draft.from || "대화") + "에서 들어온 제안입니다. 수량·평단을 확인하고 반영하세요."}</p>
+  {:else}
   <button class="drop" class:over disabled={busy}
     onclick={() => fileIn.click()}
     ondragenter={(e) => { e.preventDefault(); over = true; }}
@@ -118,6 +144,7 @@
     <span class="d2">끌어다 놓기, 붙여넣기(⌘/Ctrl + V)도 됩니다</span>
   </button>
   <input bind:this={fileIn} type="file" accept="image/*" hidden onchange={(e) => { handle(e.currentTarget.files[0]); e.currentTarget.value = ""; }} />
+  {/if}
 
   {#if msg.text}<p class="msg" class:bad={msg.bad} role="status">{msg.text}</p>{/if}
 
@@ -144,7 +171,9 @@
   {#snippet footer()}
     <div class="acts">
       <button class="btn" onclick={() => (open = false)}>닫기</button>
-      <button class="btn primary" onclick={takeIn} disabled={busy || !parsed.some((p) => p.n && p.pick)}>선택한 종목 가져오기</button>
+      <button class="btn primary" onclick={takeIn} disabled={busy || !parsed.some((p) => p.n && p.pick)}>
+        {draft ? "선택한 줄 반영" : "선택한 종목 가져오기"}
+      </button>
     </div>
   {/snippet}
 </Sheet>
@@ -157,6 +186,7 @@
   .d1{font-size:15px;font-weight:560}
   .d2{font-size:12.5px;color:var(--sub2)}
   .msg{margin-top:12px}
+  .from{margin:0;font-size:13.5px;color:var(--sub)}
   .prev{margin-top:12px;border:1px solid var(--line-soft);border-radius:12px;overflow:hidden}
   .prow{display:grid;grid-template-columns:24px minmax(0,1.5fr) 92px 110px 110px;gap:10px;align-items:center;
     min-height:44px;padding:8px 12px;font-size:14px;border-bottom:1px solid var(--line-soft)}

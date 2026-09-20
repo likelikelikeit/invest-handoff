@@ -166,13 +166,24 @@ export async function listCash(request, env, headers) {
   return json({ ok: true, cash: results }, 200, headers);
 }
 
+/** [{currency, amount}] 여러 통화를 한 번에. 초안 승인(§7.9)과 /cash가 같이 쓴다. */
+export async function putCashRows(env, rows) {
+  const at = nowIso();
+  const stmts = rows.map((r) => {
+    const ccy = oneOf(r.currency, CURRENCIES, "currency");
+    const amount = Number(r.amount);
+    if (!Number.isFinite(amount) || amount < 0) throw new HttpError(400, "amount는 0 이상의 숫자여야 합니다");
+    return env.DB.prepare(
+      "INSERT INTO cash (currency, amount, updated_at) VALUES (?1, ?2, ?3) " +
+      "ON CONFLICT(currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at"
+    ).bind(ccy, amount, at);
+  });
+  if (stmts.length) await env.DB.batch(stmts);
+  return rows;
+}
+
 export async function putCash(request, env, headers, p) {
-  const ccy = oneOf(p.currency, CURRENCIES, "currency");
-  const amount = Number((await readJson(request)).amount);
-  if (!Number.isFinite(amount)) throw new HttpError(400, "amount는 숫자여야 합니다");
-  await env.DB.prepare(
-    "INSERT INTO cash (currency, amount, updated_at) VALUES (?1, ?2, ?3) " +
-    "ON CONFLICT(currency) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at"
-  ).bind(ccy, amount, nowIso()).run();
+  const amount = (await readJson(request)).amount;
+  await putCashRows(env, [{ currency: p.currency, amount }]);
   return json({ ok: true }, 200, headers);
 }

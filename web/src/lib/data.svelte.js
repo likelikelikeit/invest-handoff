@@ -15,6 +15,7 @@ export const data = $state({
   quoteErrors: [],
   market: [], // 시장 띠: 지수·환율 securities
   views: [], // 종목별 현재 투자의견 (/views/latest)
+  drafts: [], // MCP가 넣은 대기 중 제안 (SPEC §7.9)
   loaded: false,
   offline: false,
   cachedAt: null,
@@ -35,6 +36,15 @@ export async function loadViews() {
     data.views = [];
   }
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("views-changed"));
+}
+
+/** MCP가 넣은 초안. 실패해도 앱은 그대로 돈다. */
+export async function loadDrafts() {
+  try {
+    data.drafts = (await api("/drafts?status=pending")).drafts;
+  } catch {
+    data.drafts = [];
+  }
 }
 
 /** 보유 → 원화 holding 목록 (평가액 큰 순) */
@@ -85,6 +95,7 @@ export async function load() {
     data.loaded = true;
     await refreshQuotes(data.market.map((s) => s.ysym));
     await loadViews();
+    await loadDrafts();
   } catch (e) {
     data.error = e.message;
   } finally {

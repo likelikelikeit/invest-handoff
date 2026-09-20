@@ -91,7 +91,7 @@
 야후 quoteSummary와 네이버는 비공식이라 언제든 깨질 수 있다. 소스 어댑터를 `worker/src/sources/*.js`로 분리해 교체 지점을 한 곳으로 모은다 [제안].
 
 ### 2.3 미래에 붙을 것 (지금은 만들지 않음)
-- ~~**MCP 서버**~~ → 마일스톤 9에서 만들었다. `mcp/`의 별도 Worker `invest-mcp`, 읽기 툴 6개, OAuth는 직접 구현(§7.7). 쓰기 툴(`add_note` 등)은 여전히 안 만든다.
+- ~~**MCP 서버**~~ → 마일스톤 9에서 만들었다. `mcp/`의 별도 Worker `invest-mcp`, 읽기 툴 6개, OAuth는 직접 구현(§7.8). 마일스톤 10에서 쓰기 툴 2개(보유 가져오기·의견 기록)를 더했지만 **초안까지만** 쓴다(§7.9).
 - **Cloudflare Pages + Access**: 프론트를 옮겨 사이트와 API를 한 도메인으로 묶고 구글 로그인으로 잠금.
 - **증권사 API**(토스증권/KIS): 잔고 자동 동기화. Worker에 `/balance` 경로 추가 → §5.1의 `normalize`/`merge`에 넘기면 끝.
 - **거래 이력(transactions) 테이블**: 보류. §5.1의 "변화 감지 질문"으로 대체.
@@ -577,7 +577,8 @@ CREATE TABLE meta (
 ├ mcp/                 MCP 서버 Worker (invest-mcp). 마이그레이션은 worker/migrations를 쓴다
 │  ├ src/oauth.js      인가 서버 (동적 등록·PKCE·토큰)
 │  ├ src/mcp.js        JSON-RPC (initialize / tools/list / tools/call)
-│  └ src/tools.js      읽기 툴 6개
+│  ├ src/tools.js      읽기 툴 6개
+│  └ src/write-tools.js 제안 툴 3개 (초안만 쓴다)
 └ .github/workflows/pages.yml
 ```
 
@@ -676,6 +677,12 @@ CREATE TABLE meta (
 - **계산은 툴이 한다**: 비중·수익률·TTM·PER·1년 전 대비 변화까지 코드가 계산해서 넘기고, `instructions`로 모델에게 다시 계산하지 말라고 못박는다(AGENTS 규칙 "LLM은 계산하지 않는다"의 연장).
 - **판정 분리 유지**: `get_tech_calls` 응답에 "투자의견·성과평가와 섞지 말고 예측형 조언을 만들지 말라"는 규칙 문구를 같이 넣는다.
 
+마일스톤 10에서 정한 것 (2026-09-20):
+- **쓰기는 제안까지**: MCP 쓰기 툴이 실제 보유·의견을 바로 바꾸지 않고 `import_drafts`에 쌓는다. "실제 데이터는 앱에서만 바뀐다"를 불변식으로 두면 쓰기 권한을 넓혀도 위험이 크게 늘지 않는다. 승인 화면도 홈 한 곳(가져오기 대기)이면 된다.
+- **의견도 같은 대기열을 지난다**: 대신 기록 시점이 흐려지지 않게 제출 순간의 가격·컨센서스·PER을 얼려 두고, 승인 시 그 시각으로 기록한다.
+- **정규화 재사용**: 스크린샷 판독만 대화 쪽 모델이 하고, `normalize`·`merge`·변화 감지는 기존 코드 그대로다. 초안은 `normalize`가 읽는 키 이름으로 저장한다.
+- **툴 범위**: 보유 + 현금 + 투자의견까지. 관심종목·판정·시나리오 쓰기는 열지 않았다(대화에서 만들 이유가 약하고, 판정은 지표 계산이 필요하다).
+
 ### 7.2 인증 [확정: 1차]
 - Worker 시크릿 `APP_TOKEN`(긴 무작위 문자열). 모든 API 요청에 `Authorization: Bearer <token>`. 없거나 틀리면 401.
 - 프론트: 설정 화면에서 토큰 붙여넣기 → localStorage. 기기마다 한 번.
@@ -721,6 +728,17 @@ CREATE TABLE meta (
 - 저장소: `mcp_clients`, `mcp_auth_codes`, `mcp_tokens` (마이그레이션 `0007`). 투자 데이터에는 쓰지 않는다.
 - 2026-09-20 확인: Claude와 ChatGPT 양쪽에서 커스텀 커넥터로 붙어 동작했다. 특정 클라이언트에 맞춘 구현이 아니라 표준(RFC 7591·8414·9728 + PKCE)만 따른 결과다.
 
+### 7.9 초안 대기열 (MCP 쓰기)
+모바일에서 증권사 화면을 Claude/ChatGPT에 찍어 보내면 그쪽 모델이 표를 읽고 MCP로 넣는다. 워커가 LLM을 부르지 않으므로 `/import`용 키가 없어도 가져오기가 된다.
+
+- **제안까지만 쓴다.** MCP 쓰기 툴은 `import_drafts`에만 넣는다(`0008`). 보유·현금·의견은 앱에서 승인할 때만 바뀐다. LLM 오독이 곧바로 실제 데이터가 되지 않게 하는 안전장치이고, 토큰이 새도 잃는 게 작다.
+- **툴 3개**: `submit_portfolio_import`(보유+현금), `add_investment_view`(의견), `get_pending_drafts`(대기 확인).
+- **정규화는 앱이 한다.** 초안은 `web/src/lib/calc/normalize.js`가 읽는 모양으로 저장하고, 승인 화면은 기존 스크린샷 가져오기 시트를 그대로 쓴다. 병합·변화 감지도 기존 경로(`mergeRows`)를 탄다.
+- **의견은 제출 시점을 기록한다.** `add_investment_view`가 그 순간의 가격·컨센서스·PER을 payload에 얼리고, 승인 시 `created_at`은 제출 시각(`proposed_at`)으로 들어간다. 승인이 며칠 늦어도 예측 시점이 밀리지 않는다. 가격 기준은 저장된 마지막 종가(`close YYYY-MM-DD`)다.
+- **경로**: `GET /drafts?status=`, `POST /drafts/:id/apply`(보유는 시트에서 고친 `{rows, cash}`를 보내면 그쪽이 이긴다), `POST /drafts/:id/discard`. 버린 초안도 행은 남는다.
+- **스코프**: 토큰 스코프를 `mcp:read mcp:propose`로 넓히고 로그인 화면 문구도 "읽기와 제안"으로 바꿨다. 이미 연결된 클라이언트는 다시 연결하지 않아도 된다(스코프를 강제하지 않는다).
+- `/import`(앱 안 스크린샷 업로드)는 남겨 둔다. 저렴한 공급자를 넣으면 앱만으로도 되는 길이 유지된다(§10 미정 항목 유지).
+
 ---
 
 ## 8. 구현 순서 (마일스톤) [확정]
@@ -740,6 +758,7 @@ CREATE TABLE meta (
 | 7 | 일정·거시: FOMC 등 시드, 어닝일 크론, FRED·ECOS, 금리 경로 그래프, 홈 블록 완성 | 홈 다섯 블록 전부 실데이터 |
 | 8 | 자산군 층, 기대수익률·변동성·상관, 제약 경고, PWA 오프라인 캐시, 의견 사후평가 크론 완성 | 포트폴리오 탭에 변동성이 보이고 지하철에서 앱이 열림 |
 | 9 | MCP 읽기 툴 6개 (별도 Worker `invest-mcp` + 직접 구현한 OAuth), Claude 커스텀 커넥터 연결 | Claude 앱에서 "내 투자의견" 치면 답이 옴 |
+| 10 | MCP 쓰기(제안) 툴: 사진으로 읽은 보유·대화에서 정리한 의견을 초안으로 넣고 앱에서 승인 | 폰에서 스크린샷을 Claude/ChatGPT에 주면 앱 홈에 "가져오기 대기"가 뜨고, 눌러서 보유·의견에 반영됨 |
 
 이후: Cloudflare Pages + Access 이전, 초과수익 벤치마크, 증권사 API 연동, 브리핑 생성.
 

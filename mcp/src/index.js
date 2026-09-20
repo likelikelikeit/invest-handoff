@@ -45,14 +45,15 @@ export default {
           // 서버가 먼저 보내는 스트림(GET)은 쓰지 않는다. 상태 없는 서버다.
           return json({ error: "method_not_allowed", error_description: "POST만 받습니다" }, 405);
         }
-        if (!(await verifyAccess(request, env))) return unauthorized(origin, "토큰이 없거나 만료됐습니다");
+        const token = await verifyAccess(request, env);
+        if (!token) return unauthorized(origin, "토큰이 없거나 만료됐습니다");
         let body;
         try {
           body = await request.json();
         } catch {
           return json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "JSON을 읽을 수 없습니다" } }, 400);
         }
-        const res = await handleRpc(body, env);
+        const res = await handleRpc(body, env, { clientId: token.client_id, clientName: token.client_name });
         if (res == null) return new Response(null, { status: 202, headers: CORS }); // 알림만 온 경우
         return json(res);
       }

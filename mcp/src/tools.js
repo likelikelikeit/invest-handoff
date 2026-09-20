@@ -4,7 +4,7 @@
 const round = (v, d = 2) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10 ** d) / 10 ** d);
 const pct = (v) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 1000) / 10); // 0.1234 → 12.3(%)
 
-const nowKst = () => new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).replace(" ", " ") + " KST";
+export const nowKst = () => new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).replace(" ", " ") + " KST";
 const todayKst = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 const addDays = (d, n) => {
   const t = new Date(d + "T00:00:00Z");
@@ -26,7 +26,7 @@ async function fxUsdKrw(env) {
 const toKrw = (v, ccy, fx) => (v == null ? null : ccy === "USD" ? (fx ? v * fx.rate : null) : v);
 
 /** 티커·야후심볼·이름으로 종목 하나 찾기. 못 찾으면 후보를 알려주고 멈춘다. */
-async function findSecurity(env, q) {
+export async function findSecurity(env, q) {
   const s = String(q || "").trim();
   if (!s) throw new ToolError("종목(ticker)을 지정해 주세요");
   const { results } = await env.DB.prepare(
@@ -364,7 +364,7 @@ async function getTechCalls(env, args) {
 const NO_ARGS = { type: "object", properties: {}, additionalProperties: false };
 const TICKER = { type: "string", description: "종목 티커·야후 심볼·한글 이름 (예: NVDA, 005930, 삼성전자)" };
 
-export const TOOLS = [
+export const READ_TOOLS = [
   {
     name: "get_portfolio",
     title: "보유 포트폴리오",
@@ -430,5 +430,4 @@ export const TOOLS = [
   },
 ];
 
-export const TOOL_BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
 export { ToolError };

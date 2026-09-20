@@ -98,6 +98,27 @@ export async function latestViews(request, env, headers) {
   return json({ ok: true, views: results.map(out) }, 200, headers);
 }
 
+/**
+ * 의견 한 행을 넣는다. 스냅샷(가격·컨센·PER)과 기록 시각을 밖에서 준다.
+ * 앱에서 바로 기록할 때는 '지금'이지만, MCP 초안을 승인할 때는 제출 시점을 그대로 쓴다 (SPEC §7.9).
+ */
+export async function insertView(env, { securityId, currency, createdAt, fields: f, snapshot }) {
+  const row = await env.DB.prepare(
+    "INSERT INTO views (security_id, created_at, rating, rating_score, target_price, target_ccy, horizon_months, thesis, risks, valuation, " +
+    "price_at, price_at_source, upside_pct, consensus_target_at, per_at) " +
+    "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15) RETURNING id"
+  ).bind(
+    securityId, createdAt, f.rating, f.rating_score, f.target_price, currency, f.horizon_months,
+    f.thesis ?? null, f.risks ?? null, f.valuation ?? null,
+    snapshot.price, snapshot.source, f.target_price / snapshot.price - 1,
+    snapshot.consensus ?? null, snapshot.per ?? null
+  ).first();
+  const v = await env.DB.prepare(SELECT + "WHERE v.id = ?1").bind(row.id).first();
+  return out(v);
+}
+
+export { fields as viewFields };
+
 // POST /views — 새 의견. 스냅샷은 서버가 얼린다.
 export async function createView(request, env, headers) {
   const body = await readJson(request);
@@ -106,19 +127,11 @@ export async function createView(request, env, headers) {
   if (!sec) throw new HttpError(404, "종목 " + body.security_id + "이(가) 없습니다");
   const f = fields(body, false);
   const px = await priceNow(env, sec);
-  const cons = await consensusNow(env, sid);
-  const per = await perAt(env, sid, px.price);
-  const row = await env.DB.prepare(
-    "INSERT INTO views (security_id, created_at, rating, rating_score, target_price, target_ccy, horizon_months, thesis, risks, valuation, " +
-    "price_at, price_at_source, upside_pct, consensus_target_at, per_at) " +
-    "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15) RETURNING id"
-  ).bind(
-    sid, nowIso(), f.rating, f.rating_score, f.target_price, sec.currency, f.horizon_months,
-    f.thesis ?? null, f.risks ?? null, f.valuation ?? null,
-    px.price, px.source, f.target_price / px.price - 1, cons, per
-  ).first();
-  const v = await env.DB.prepare(SELECT + "WHERE v.id = ?1").bind(row.id).first();
-  return json({ ok: true, view: out(v) }, 200, headers);
+  const view = await insertView(env, {
+    securityId: sid, currency: sec.currency, createdAt: nowIso(), fields: f,
+    snapshot: { price: px.price, source: px.source, consensus: await consensusNow(env, sid), per: await perAt(env, sid, px.price) },
+  });
+  return json({ ok: true, view }, 200, headers);
 }
 
 // PATCH /views/:id — 편집. edited_at을 채우고, 목표가가 바뀌면 기록 시점 가격 기준으로 상승여력을 다시 계산.

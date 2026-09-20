@@ -32,7 +32,7 @@ export function resourceMetadata(origin) {
   return {
     resource: origin + "/mcp",
     authorization_servers: [origin],
-    scopes_supported: ["mcp:read"],
+    scopes_supported: ["mcp:read", "mcp:propose"],
     bearer_methods_supported: ["header"],
   };
 }
@@ -117,13 +117,14 @@ const PAGE = (client, params, error) => `<!doctype html>
 </style></head>
 <body><form class="card" method="post" action="/authorize">
   <h1>투자 노트 연결</h1>
-  <p><strong>${escapeHtml(client.client_name)}</strong>이(가) 내 투자 데이터를 <strong>읽기 전용</strong>으로 보려고 합니다.
+  <p><strong>${escapeHtml(client.client_name)}</strong>이(가) 내 투자 데이터를 <strong>읽기</strong>와 <strong>제안</strong> 권한으로 연결하려고 합니다.
      앱에서 쓰는 토큰을 붙여넣으면 연결됩니다.</p>
   <label for="token">앱 토큰</label>
   <input id="token" name="token" type="password" autocomplete="off" autofocus required>
   ${error ? `<p class="err">${escapeHtml(error)}</p>` : ""}
   <button type="submit">연결 허용</button>
-  <p class="note">읽기만 합니다. 보유·의견·일정·거시·판정 기록을 조회하고, 아무것도 바꾸지 않습니다.</p>
+  <p class="note">보유·의견·일정·거시·판정 기록을 <strong>읽고</strong>, 사진으로 읽은 보유나 대화에서 정리한 의견을
+     <strong>제안</strong>할 수 있습니다. 실제 반영은 앱에서 직접 승인할 때만 일어납니다.</p>
   ${HIDDEN.map((k) => (params[k] ? `<input type="hidden" name="${k}" value="${escapeHtml(params[k])}">` : "")).join("")}
 </form></body></html>`;
 
@@ -174,7 +175,7 @@ async function issue(env, clientId) {
     token_type: "Bearer",
     expires_in: Math.floor(ACCESS_TTL / 1000),
     refresh_token: refresh,
-    scope: "mcp:read",
+    scope: "mcp:read mcp:propose",
   });
 }
 
@@ -214,7 +215,10 @@ export async function verifyAccess(request, env) {
   const m = /^Bearer\s+(.+)$/i.exec(request.headers.get("Authorization") || "");
   if (!m) return null;
   const hash = await sha256hex(m[1].trim());
-  const row = await env.DB.prepare("SELECT * FROM mcp_tokens WHERE token_hash = ?1 AND kind = 'access'").bind(hash).first();
+  const row = await env.DB.prepare(
+    "SELECT t.*, c.client_name FROM mcp_tokens t LEFT JOIN mcp_clients c ON c.client_id = t.client_id " +
+    "WHERE t.token_hash = ?1 AND t.kind = 'access'"
+  ).bind(hash).first();
   if (!row || row.revoked_at || Date.parse(row.expires_at) < Date.now()) return null;
   const today = new Date().toISOString().slice(0, 10);
   // 마지막 사용은 하루 한 번만 기록한다 (D1 쓰기 아끼기).
