@@ -278,6 +278,42 @@ export function normalizeYahooFinancials(rows, {
   });
 }
 
+function recentQuarterSum(rows, key) {
+  const values = rows.filter((row) => row.period_type === "Q" && typeof row[key] === "number").slice(-4);
+  return values.length === 4 ? values.reduce((sum, row) => sum + row[key], 0) : null;
+}
+
+function closerTo(value, a, b) {
+  if (!(value > 0) || !(a > 0) || !(b > 0)) return null;
+  return Math.abs(Math.log(value / a)) <= Math.abs(Math.log(value / b));
+}
+
+/**
+ * Yahoo의 교차통화 컨센서스는 항목별 단위가 일정하지 않다. 합계 매출은 재무 통화이고,
+ * EPS는 TSM처럼 상장 통화 ADR 기준이거나 NVO처럼 재무 통화 기준일 수 있다.
+ * 최근 TTM의 원천/정규화 규모와 비교해 EPS 단위를 판별하고, 원천 단위일 때만 환산한다.
+ */
+export function normalizeYahooEstimates(estimates, rawRows, normalizedRows, {
+  sourceCurrency, listingCurrency, latestRate,
+}) {
+  if (!sourceCurrency || !listingCurrency || sourceCurrency === listingCurrency) return estimates;
+  if (!(latestRate > 0)) {
+    return estimates.map((row) => row.fiscal_year == null ? row : { ...row, eps: null, revenue: null });
+  }
+  const rawEps = recentQuarterSum(rawRows, "eps");
+  const listingEps = recentQuarterSum(normalizedRows, "eps");
+  return estimates.map((row) => {
+    if (row.fiscal_year == null) return row; // 목표가는 상장 통화다.
+    const epsInSource = closerTo(row.eps, rawEps, listingEps);
+    return {
+      ...row,
+      eps: typeof row.eps === "number" && epsInSource ? row.eps * latestRate : row.eps,
+      // Yahoo earningsTrend의 aggregate 매출은 financialCurrency 기준이다.
+      revenue: typeof row.revenue === "number" ? row.revenue * latestRate : row.revenue,
+    };
+  });
+}
+
 /** 분기말 이하의 마지막 거래일 환율(상장통화/재무통화). */
 export function financialRateAt(rows, date, inverse = false) {
   let hit = null;
@@ -350,10 +386,14 @@ export async function yahooFundamentals(env, symbol, now = new Date(), { listing
   const fx = sourceCurrency && listingCurrency
     ? await yahooFinancialFxHistory(sourceCurrency, listingCurrency)
     : null;
-  const financials = normalizeYahooFinancials(parseYahooTimeSeries(series), {
+  const rawFinancials = parseYahooTimeSeries(series);
+  const financials = normalizeYahooFinancials(rawFinancials, {
     sourceCurrency, listingCurrency, adrRatio,
     endRateForDate: fx?.endRate || null,
     incomeRateForDate: fx?.incomeRate || null,
+  });
+  const estimates = normalizeYahooEstimates(s.estimates, rawFinancials, financials, {
+    sourceCurrency, listingCurrency, latestRate: fx?.latestRate ?? null,
   });
   const errors = [];
   if (sourceCurrency && listingCurrency && sourceCurrency !== listingCurrency && !(Number(adrRatio) > 0)) {
@@ -364,7 +404,7 @@ export async function yahooFundamentals(env, symbol, now = new Date(), { listing
   }
   return {
     financials,
-    estimates: s.estimates,
+    estimates,
     earningsDate: s.earningsDate,
     financialCurrency: sourceCurrency,
     financialToListingRate: fx?.latestRate ?? null,

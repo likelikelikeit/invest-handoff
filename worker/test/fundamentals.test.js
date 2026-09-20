@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { makeDb } from "./d1shim.js";
 import { parseNaverConsensus, parseNaverFinance } from "../src/sources/naver.js";
-import { parseYahooSummary, parseYahooTimeSeries, normalizeYahooFinancials, financialRateAt, financialIncomeRate } from "../src/sources/yahoo.js";
+import { parseYahooSummary, parseYahooTimeSeries, normalizeYahooFinancials, normalizeYahooEstimates, financialRateAt, financialIncomeRate } from "../src/sources/yahoo.js";
 import { parseDartStatement, recentDartReports } from "../src/sources/dart.js";
 import { upsertFinancialsStmt, upsertEstimatesStmt, upsertEarningsStmt } from "../src/lib/fundamentals.js";
 import { getFundamentals } from "../src/routes/fundamentals.js";
@@ -70,6 +70,18 @@ describe("외부 재무 파서", () => {
     expect(financialRateAt(fx, "2026-06-30", true)).toBeCloseTo(1 / 31);
     expect(financialIncomeRate(fx, "2026-06-30", true)).toBeCloseTo((1 / 32 + 1 / 31) / 2);
     expect(financialRateAt(fx, "2026-01-01", true)).toBeNull();
+  });
+
+  it("교차통화 컨센서스의 매출과 원천 통화 EPS만 상장 통화로 바꾼다", () => {
+    const rawRows = [1, 2, 3, 4].map((n) => ({ period_type: "Q", eps: 6, revenue: 75 }));
+    const usdRows = rawRows.map((row) => ({ ...row, eps: row.eps * 0.16, revenue: row.revenue * 0.16 }));
+    const base = { fiscal_year: 2027, revenue: 320, target_price: null };
+    expect(normalizeYahooEstimates([{ ...base, eps: 24 }], rawRows, usdRows, {
+      sourceCurrency: "DKK", listingCurrency: "USD", latestRate: 0.16,
+    })[0]).toMatchObject({ eps: 3.84, revenue: 51.2 });
+    expect(normalizeYahooEstimates([{ ...base, eps: 4.2 }], rawRows, usdRows, {
+      sourceCurrency: "TWD", listingCurrency: "USD", latestRate: 0.032,
+    })[0]).toMatchObject({ eps: 4.2, revenue: 10.24 });
   });
 
   it("DART 핵심 계정을 골라 분기 행을 만든다", () => {
