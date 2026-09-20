@@ -58,6 +58,7 @@ describe("메타데이터", () => {
     expect(as.issuer).toBe(ORIGIN);
     expect(as.token_endpoint).toBe(ORIGIN + "/token");
     expect(as.code_challenge_methods_supported).toEqual(["S256"]);
+    expect(as.scopes_supported).toEqual(["mcp:read", "mcp:propose"]);
 
     // 클라이언트는 자원 경로를 붙여서도 물어본다
     const prm = await (await call("/.well-known/oauth-protected-resource/mcp")).json();

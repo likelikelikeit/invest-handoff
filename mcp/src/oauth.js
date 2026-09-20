@@ -23,7 +23,7 @@ export function authServerMetadata(origin) {
     grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
-    scopes_supported: ["mcp:read"],
+    scopes_supported: ["mcp:read", "mcp:propose"],
   };
 }
 
