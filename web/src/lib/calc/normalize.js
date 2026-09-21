@@ -6,6 +6,16 @@ export function guessYsym(tick) {
   return /^[0-9]{6}$/.test(tick) ? tick + ".KS" : tick;
 }
 
+/**
+ * 역산한 수량이 정수에 아주 가까우면 정수로 맞춘다 (15.999968 → 16).
+ * 나눗셈 찌꺼기를 그대로 저장하면 다음에 제대로 입력할 때 "수량이 바뀌었다"로 잡힌다.
+ * 소수점 거래(0.065주, 4.134주)는 정수에서 멀어 건드리지 않는다.
+ */
+export function snapInteger(q) {
+  const r = Math.round(q);
+  return r >= 1 && Math.abs(q - r) <= Math.max(1e-6, r * 1e-5) ? r : q;
+}
+
 export function num(v) {
   if (v === null || v === undefined || v === "") return 0;
   const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ""));
@@ -31,7 +41,7 @@ export function normalize(row, fx) {
   // 화면에 수량이 없으면 평가금액·손익·평단으로 역산한다
   if (!(qty > 0) && mv > 0 && avg > 0) {
     const cost = mv - (pl || 0);
-    if (cost > 0) qty = cost / avg;
+    if (cost > 0) qty = snapInteger(cost / avg);
   }
   if (!(price > 0) && mv > 0 && qty > 0) price = mv / qty;
   if (!(price > 0) && avg > 0) price = avg;

@@ -49,7 +49,13 @@ export async function getPortfolio(request, env, headers) {
 // 보유 수량이 바뀌는 모든 쓰기(merge, put, delete)는 position_changes에 행을 남긴다(reason NULL).
 // 앱은 응답의 changes로 "매수/매도/…" 질문을 띄우고 PATCH로 이유를 채운다. 시트를 닫아도 기록은 남는다.
 
-const QTY_EPS = 1e-9;
+// 역산(평가금액 ÷ 평단)으로 만들어진 수량은 16이 15.999968로 저장되기도 한다.
+// 그런 반올림 찌꺼기로 "매수/매도?" 질문을 띄우지 않는다. 수량 자체는 그대로 갱신된다.
+// 소수점 거래(0.065주, 4.134주)는 상대 오차가 훨씬 커서 여기에 걸리지 않는다.
+export function qtyChanged(a = 0, b = 0) {
+  const diff = Math.abs(a - b);
+  return diff > Math.max(1e-6, Math.max(Math.abs(a), Math.abs(b)) * 1e-5);
+}
 
 async function currentQty(env, ids) {
   if (!ids.length) return new Map();
@@ -61,7 +67,7 @@ async function currentQty(env, ids) {
 
 /** before/after 수량 맵을 비교해 바뀐 것만 기록하고 반환한다. */
 async function recordChanges(env, pairs, at) {
-  const changed = pairs.filter((x) => Math.abs((x.before || 0) - (x.after || 0)) > QTY_EPS);
+  const changed = pairs.filter((x) => qtyChanged(x.before || 0, x.after || 0));
   if (!changed.length) return [];
   const res = await env.DB.batch(changed.map((x) => env.DB.prepare(
     "INSERT INTO position_changes (security_id, detected_at, qty_before, qty_after) VALUES (?1, ?2, ?3, ?4) RETURNING id"

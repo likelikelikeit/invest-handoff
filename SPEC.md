@@ -383,7 +383,7 @@ CREATE TABLE meta (
 - `normalize`: `{name, ticker, currency, qty, avgPrice, currentPrice, marketValue, profit}` 중 있는 것으로 `qty`, `avg`, `price`를 확정. 수량이 없으면 `qty = (marketValue − profit) / avgPrice`, 현재가가 없으면 `price = marketValue / qty`. 6자리 숫자 티커는 KR, 야후 심볼은 `{ticker}.KS` 추정(코스닥은 `.KQ`, 검색으로 정확히 잡음).
 - `merge`: `ysym` 일치하면 덮어쓰기(`asOwned`면 positions 갱신), 없으면 securities + positions 생성.
 - 스크린샷: 브라우저에서 1600px로 축소 → Worker `/import` → Claude API → 표 미리보기 시트(체크박스) → 선택 가져오기. 이미 worker.js에 구현.
-- **변화 감지 질문** [확정]: 새 스크린샷/입력으로 positions가 바뀌면 종목별 수량 차이를 계산해 시트로 묻는다: `매수 / 매도 / 배당 재투자 / 분할·병합 / 모름(스킵)`. 답은 `meta`가 아닌 별도 `position_changes` 테이블에 기록 [제안: `(id, security_id, detected_at, qty_before, qty_after, reason, skipped)`]. 이게 거래 이력의 대체물이다.
+- **변화 감지 질문** [확정]: 새 스크린샷/입력으로 positions가 바뀌면 종목별 수량 차이를 계산해 시트로 묻는다: `매수 / 매도 / 배당 재투자 / 분할·병합 / 모름(스킵)`. 답은 `meta`가 아닌 별도 `position_changes` 테이블에 기록 [제안: `(id, security_id, detected_at, qty_before, qty_after, reason, skipped)`]. 이게 거래 이력의 대체물이다. 수량은 역산(평가금액 ÷ 평단)으로 만들어지기도 해서 16이 15.999968로 저장될 수 있다. `normalize`가 정수에 아주 가까운 역산값을 정수로 맞추고, 서버도 상대 1e-5(최소 1e-6) 이하 차이는 변화로 보지 않는다. 소수점 거래(0.065주)는 정수에서 멀어 그대로 남는다 [2026-09-22].
 - 종목 추가 폼의 두 버튼 [확정]: **보유 등록**(기존 보유. 총자산에 포함, 현금 변화 없음) / **매수 시뮬**(현금을 써서 새로 담음, 주문서에 잡힘).
 
 ### 5.2 투자의견
