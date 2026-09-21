@@ -75,6 +75,24 @@ export function stamp(iso) {
   return g("month") + "/" + g("day") + " " + g("hour") + ":" + g("minute");
 }
 
+/**
+ * 목록용 날짜 (KST). 올해는 "8/26", 다른 해는 "2025/8/26".
+ * 시각까지 앞에 내세우지 않는다 — 기록이 쌓이면 시:분은 소음이다.
+ */
+export function dayStamp(iso, now = new Date()) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const parts = (x) => {
+    const p = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric" }).formatToParts(x);
+    const g = (t) => p.find((v) => v.type === t)?.value;
+    return { y: g("year"), m: g("month"), d: g("day") };
+  };
+  const a = parts(d);
+  const b = parts(now);
+  return (a.y === b.y ? "" : a.y + "/") + a.m + "/" + a.d;
+}
+
 export function parseNum(v) {
   const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ""));
   return Number.isFinite(n) ? n : 0;

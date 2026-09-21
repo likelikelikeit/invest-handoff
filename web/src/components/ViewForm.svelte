@@ -66,7 +66,7 @@
   let fundFor = $state(null);
 
   // 소급 기록 (SPEC §5.2.6): 앱을 쓰기 전에 했던 판단을 넣는다.
-  // 그날 종가로 스냅샷을 복원하되 '사후 입력'으로 표시되고 성과는 따로 집계된다.
+  // 그날 종가로 스냅샷을 복원한다. 성과 평가에도 같이 들어간다 (사용자 결정 2026-09-22).
   let backdate = $state(false);
   const maxDate = todayKst();
 
@@ -90,6 +90,12 @@
       if (edit) {
         sid = edit.security_id;
         f = { rating: edit.rating, target: String(edit.target_price), horizon: edit.horizon_months, conclusion: edit.conclusion || "", thesis: edit.thesis || "", risks: edit.risks || "", asOf: "" };
+        // 목표가 산출 방식이 남아 있으면 그대로 열어 둔다 (목표가만 고치고 근거가 어긋나는 걸 막는다)
+        const a = edit.valuation;
+        if (a && a.value > 0 && a.multiple > 0 && FORM_METRICS.some((m) => m.key === a.metric)) {
+          val = { metric: a.metric, value: String(a.value), multiple: String(a.multiple) };
+          useVal = true;
+        }
       } else {
         sid = req.securityId ?? null;
         // 최신 의견이 있으면 그 내용을 출발점으로 (업데이트는 새 행)
@@ -195,7 +201,10 @@
     const body = { rating: f.rating, target_price: target, horizon_months: f.horizon, conclusion: f.conclusion, thesis: f.thesis, risks: f.risks };
     try {
       if (edit) {
-        await api("/views/" + edit.id, { method: "PATCH", body });
+        const valEdit = implied != null
+          ? { valuation: { metric: val.metric, value: parseNum(val.value), multiple: parseNum(val.multiple), implied_target: implied } }
+          : useVal ? { valuation: null } : {};
+        await api("/views/" + edit.id, { method: "PATCH", body: { ...body, ...valEdit } });
         toast("의견을 수정했습니다");
       } else {
         const asOf = backdate && f.asOf ? { as_of: f.asOf } : {};
@@ -204,7 +213,7 @@
           : ui.viewForm?.valuation ? { valuation: ui.viewForm.valuation } : {};
         const r = await api("/views", { method: "POST", body: { security_id: sid, ...body, ...asOf, ...valuation } });
         toast(r.view.backdated
-          ? (sec?.name || "") + " " + f.asOf + " 의견을 사후 입력으로 기록했습니다 (그날 " + fmt(r.view.price_at) + ")"
+          ? (sec?.name || "") + " " + f.asOf + " 시점으로 기록했습니다 (그날 주가 " + fmt(r.view.price_at) + ")"
           : (sec?.name || "") + (previous ? " 투자의견을 업데이트했습니다" : " 커버리지를 개시했습니다"));
       }
       open = false;
@@ -227,7 +236,7 @@
       </p>
     {/if}
     {#if edit}
-      <p class="lead">{edit.name} · {stamp(edit.created_at)} 기록 · 기록 시점 가격 {fmt(edit.price_at)}은 그대로 두고 '수정됨'이 붙습니다.</p>
+      <p class="lead">{edit.name} · {stamp(edit.created_at)} 기록 · 분석 당시 주가 {fmt(edit.price_at)}는 그대로 두고 '수정됨'이 붙습니다.</p>
     {:else if ui.viewForm && ui.viewForm.securityId == null}
       <label class="full"><span>종목</span>
         <SelectField bind:value={sid} placeholder="종목을 선택해 주세요" ariaLabel="투자의견 종목"
@@ -236,7 +245,7 @@
       </label>
     {:else if sec}
       <p class="lead">{sec.name} · 현재가 {price != null ? fmt(price) : "시세 없음"}
-        <InfoTip label="가격 기록 방식" text="저장하는 순간 앱이 확인한 지연 현재가를 기록 시점 가격으로 고정합니다. 이후 가격이 바뀌어도 이 값은 바뀌지 않습니다." />
+        <InfoTip label="가격 기록 방식" text="저장하는 순간 앱이 확인한 지연 현재가를 '분석 당시 주가'로 고정합니다. 이후 가격이 바뀌어도 이 값은 바뀌지 않습니다." />
       </p>
     {/if}
 
@@ -253,7 +262,7 @@
     <label><span>목표가 ({sec?.currency === "USD" ? "달러" : "원"})</span>
       <input class="num" bind:value={f.target} inputmode="decimal" placeholder={price != null ? String(price) : ""} />
       {#if backdate}<em>상승여력은 저장할 때 그날 종가 기준으로 계산됩니다</em>
-      {:else if upside != null}<em class="num {tone(upside * 1e6)}">{edit ? "기록 시점 대비" : "지금 대비"} {pctSigned(upside)}</em>{/if}
+      {:else if upside != null}<em class="num {tone(upside * 1e6)}">{edit ? "분석 당시 대비" : "지금 대비"} {pctSigned(upside)}</em>{/if}
     </label>
 
     <fieldset>
@@ -265,8 +274,7 @@
       </div>
     </fieldset>
 
-    {#if !edit}
-      <div class="full vblock">
+    <div class="full vblock">
         <label class="chk">
           <input type="checkbox" bind:checked={useVal} />
           <span>밸류에이션으로 목표가 계산</span>
@@ -294,13 +302,14 @@
             <p class="vres num">= {fmt(sec?.currency === "KRW" ? Math.round(implied) : Math.round(implied * 100) / 100)}</p>
           {/if}
         {/if}
-      </div>
+    </div>
 
+    {#if !edit}
       <div class="full back">
         <label class="chk">
           <input type="checkbox" bind:checked={backdate} />
           <span>과거 날짜로 기록</span>
-          <InfoTip label="과거 날짜로 기록" text="앱을 쓰기 전에 했던 판단을 넣을 때 씁니다. 그날 종가·그 시점 컨센서스·PER로 스냅샷을 복원하지만, 결과를 알고 적은 기록이라 '사후 입력'으로 표시되고 성과 평가에서도 따로 집계합니다." />
+          <InfoTip label="과거 날짜로 기록" text="앱을 쓰기 전에 했던 판단을 넣을 때 씁니다. 그날 종가·그 시점 컨센서스·PER로 스냅샷을 복원하며, 성과 평가에도 같이 들어갑니다." />
         </label>
         {#if backdate}
           <input type="date" bind:value={f.asOf} max={maxDate} aria-label="기록 날짜" />

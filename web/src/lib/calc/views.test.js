@@ -74,19 +74,16 @@ describe("homeRows", () => {
     expect(rows.map((r) => r.view.security_id)).toEqual([2, 1]);
   });
 
-  it("사후 입력은 본 성적에서 빼고 backdated로 따로 낸다", () => {
+  it("사후 입력도 같은 성적에 센다", () => {
     const base = { horizon_months: 12, evaluated_at: "2026-09-01", hit: 1, target_return: 0.3, actual_return: 0.2, abs_error: 0.1 };
     const p = performance([
       { ...base, created_at: "2025-06-01T00:00:00+09:00" },
       { ...base, created_at: "2025-07-01T00:00:00+09:00", hit: 0, backdated: 1 },
       { created_at: "2026-09-01T00:00:00+09:00", horizon_months: 12, backdated: 1 },
     ], "2026-09-19");
-    expect(p.n).toBe(1);                 // 실시간 평가 1건
-    expect(p.hitRate).toBe(1);
-    expect(p.inProgress).toBe(0);        // 진행 중 1건은 사후 입력이라 빠진다
-    expect(p.backdated.total).toBe(2);
-    expect(p.backdated.n).toBe(1);
-    expect(p.backdated.hitRate).toBe(0);
-    expect(p.backdated.inProgress).toBe(1);
+    expect(p.n).toBe(2);
+    expect(p.hitRate).toBe(0.5);
+    expect(p.inProgress).toBe(1);     // 소급 기록도 진행 중으로 센다
+    expect(p.backdated).toBeUndefined();
   });
 });

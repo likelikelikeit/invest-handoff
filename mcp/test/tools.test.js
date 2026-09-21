@@ -77,7 +77,7 @@ describe("get_investment_views", () => {
     expect(v.target_basis.text).toBe("EPS 8000 × PER 12");
   });
 
-  it("사후 입력(backdated)은 예측 성적에서 빼고 따로 센다", async () => {
+  it("사후 입력(backdated)도 같은 성적에 넣는다", async () => {
     env.DB.raw.prepare(
       "INSERT INTO views (security_id, created_at, rating, rating_score, target_price, target_ccy, horizon_months, " +
       "price_at, price_at_source, upside_pct, evaluated_at, hit, actual_return, target_return, abs_error, backdated) " +
@@ -86,10 +86,9 @@ describe("get_investment_views", () => {
     ).run();
 
     const r = await run("get_investment_views", { ticker: "NVDA" });
-    expect(r.evaluated_summary.n).toBe(1);          // 실시간 기록 1건만
-    expect(r.evaluated_summary.hit_rate_pct).toBe(100);
-    expect(r.backdated_summary.n).toBe(1);          // 사후 입력은 따로
-    expect(r.backdated_summary.hit_rate_pct).toBe(0);
+    expect(r.evaluated_summary.n).toBe(2);           // 실시간 1 + 사후 1
+    expect(r.evaluated_summary.hit_rate_pct).toBe(50);
+    expect(r.backdated_summary).toBeUndefined();
     expect(r.views.find((v) => v.backdated).created_at).toBe("2025-06-03T00:00:00+09:00");
     expect(r.rule).toContain("소급");
   });

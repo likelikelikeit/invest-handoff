@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   ttmSeries, consecutiveQuarters, dailyMultiples, quantile, cleanMultiple, suggestedMultiples,
-  valueFromGrowth, growthFromValue, scenarioTarget, bandPrice, roundValue,
+  valueFromGrowth, growthFromValue, scenarioTarget, bandPrice, roundValue, basisText, multipleText,
 } from "./valuation.js";
 
 // 실제 분기 말 (2024-12-31 ~ 2025-12-31)
@@ -48,5 +48,32 @@ describe("밸류에이션 순수 계산", () => {
     expect(bandPrice({ eps: 12 }, "per", 20)).toBe(240);
     expect(roundValue(7.91 * 1.2, "per")).toBe(9.492);
     expect(roundValue(1234567.89, "ev_ebitda")).toBe(1234568);
+  });
+});
+
+describe("목표가 산출 방식 표기", () => {
+  const usd = (v) => "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const won = (v) => Math.round(v).toLocaleString("ko-KR") + "원";
+
+  it("배수에는 '배', 기준값에는 통화를 붙인다", () => {
+    expect(basisText({ metric: "per", value: 15, multiple: 40 }, usd)).toBe("EPS $15.00 × PER 40배 = $600.00");
+    expect(basisText({ metric: "pbr", value: 52000, multiple: 1.2 }, won)).toBe("BPS 52,000원 × PBR 1.2배 = 62,400원");
+    expect(basisText({ metric: "psr", value: 8, multiple: 3.5 }, usd)).toBe("주당매출 $8.00 × PSR 3.5배 = $28.00");
+  });
+
+  it("EV/EBITDA는 곱셈 결과를 주당 목표가로 쓰지 않는다", () => {
+    expect(basisText({ metric: "ev_ebitda", value: 2400, multiple: 12 }, usd)).toBe("EBITDA $2,400.00 × EV/EBITDA 12배");
+  });
+
+  it("값이 모자라면 표기하지 않는다", () => {
+    expect(basisText(null, usd)).toBeNull();
+    expect(basisText({ metric: "per", value: 0, multiple: 40 }, usd)).toBeNull();
+    expect(basisText({ metric: "없음", value: 1, multiple: 2 }, usd)).toBeNull();
+  });
+
+  it("배수는 군더더기 0을 뗀다", () => {
+    expect(multipleText(40)).toBe("40배");
+    expect(multipleText(1.2)).toBe("1.2배");
+    expect(multipleText(12.5)).toBe("12.5배");
   });
 });

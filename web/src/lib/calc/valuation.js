@@ -145,3 +145,22 @@ export function latestConsensusValue(estimates, metric, latestTtm) {
   }
   return null;
 }
+
+/** 배수 표기: 40 → "40배", 1.2 → "1.2배" */
+export function multipleText(n) {
+  if (!Number.isFinite(n)) return "";
+  return String(parseFloat(n.toFixed(2))) + "배";
+}
+
+/**
+ * 목표가 산출 방식 한 줄 (SPEC §5.2.7).
+ *   "EPS $15.00 × PER 40배 = $600.00"
+ * fmt는 종목 통화 표기 함수(valueFmt). EV/EBITDA는 순부채·주식수를 거쳐 주당 목표가가 나오므로
+ * 곱셈 결과를 그대로 쓰지 않고 앞부분만 적는다.
+ */
+export function basisText(a, fmt) {
+  const m = VALUATION_METRICS.find((x) => x.key === a?.metric);
+  if (!m || !(a.value > 0) || !(a.multiple > 0)) return null;
+  const head = m.valueLabel + " " + fmt(a.value) + " × " + m.label + " " + multipleText(a.multiple);
+  return m.key === "ev_ebitda" ? head : head + " = " + fmt(a.value * a.multiple);
+}

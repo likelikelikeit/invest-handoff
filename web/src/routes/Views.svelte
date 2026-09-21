@@ -100,7 +100,10 @@
       {/if}
     </Section>
   {:else}
-  <Section id="views-perf" title="성과 평가" note="사전 예측만">
+  <Section id="views-perf" title="성과 평가">
+    {#snippet aside()}
+      <InfoTip label="성과 평가 기준" text="목표 시점이 지난 투자의견부터 평가합니다. 적중은 기간 안에 목표가에 한 번이라도 도달한 경우이며, 평균 목표수익률과 평균 실제수익률의 차이로 낙관·비관 편향을 읽을 수 있습니다. 과거 날짜로 소급 기록한 의견도 같이 셉니다." />
+    {/snippet}
     <div class="perf">
       <div class="big">
         <span class="lbl">적중률</span>
@@ -115,15 +118,7 @@
         {#if perf.awaiting}<div><dt>평가 대기</dt><dd>{perf.awaiting}건</dd></div>{/if}
       </dl>
     </div>
-      {#if perf.backdated.total}
-      <p class="back">
-        사후 입력 {perf.backdated.total}건은 위 숫자에서 뺐습니다{#if perf.backdated.n}
-          · 그중 평가된 {perf.backdated.n}건의 적중률 {perf.backdated.hitRate != null ? pct(perf.backdated.hitRate * 100) : "—"}{/if}
-        <InfoTip label="사후 입력" text="과거 날짜로 소급 기록한 의견입니다. 기록 시점 가격은 그날 종가로 복원해 사실이지만, 판단 자체는 결과를 알고 적은 것이라 사전 예측과 같은 칸에서 세지 않습니다." />
-      </p>
-    {/if}
-  <div class="criteria"><span>평가 기준</span><InfoTip label="성과 평가 기준" text="목표 시점이 지난 투자의견부터 평가합니다. 적중은 기간 안에 목표가에 한 번이라도 도달한 경우이며, 평균 목표수익률과 평균 실제수익률의 차이로 낙관·비관 편향을 읽을 수 있습니다." /></div>
-  </Section>
+    </Section>
 
   <Section id="views-list" title="투자의견 이력" note={shown.length + "건"}>
     <div class="filters">

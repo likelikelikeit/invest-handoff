@@ -187,10 +187,9 @@ async function getViews(env, args) {
     as_of: nowKst(),
     scope: latestOnly ? "종목별 현재 의견(최신 행)" : args.ticker ? "이 종목의 의견 이력" : "전체 의견 이력(최신순)",
     rule: "의견은 덮어쓰지 않는 기록이다. 같은 종목의 여러 행은 시간에 따른 생각의 변화다. " +
-      "backdated=true인 행은 과거 날짜로 소급 입력한 것이라 예측 성적에 섞지 않는다.",
+      "backdated=true는 과거 날짜로 소급 입력한 것이고, 성과 집계에는 같이 들어간다.",
     count: results.length,
-    evaluated_summary: summarize(done.filter((v) => v.backdated !== 1)),
-    backdated_summary: summarize(done.filter((v) => v.backdated === 1)),
+    evaluated_summary: summarize(done),
     views: results.map(viewOut),
   };
 }
