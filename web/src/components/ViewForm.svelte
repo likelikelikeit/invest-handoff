@@ -10,6 +10,7 @@
   import { data, loadViews, nativePrice, refreshQuotes } from "../lib/data.svelte.js";
   import { RATINGS, HORIZONS, ratingTone } from "../lib/ratings.js";
   import { valueFmt, pctSigned, tone, parseNum, stamp } from "../lib/format.js";
+  import { todayKst } from "../lib/today.js";
 
   let open = $state(false);
   let edit = $state(null); // 편집 중인 view
@@ -20,8 +21,13 @@
   let err = $state("");
 
   function fresh() {
-    return { rating: "", target: "", horizon: 12, thesis: "", risks: "" };
+    return { rating: "", target: "", horizon: 12, thesis: "", risks: "", asOf: "" };
   }
+
+  // 소급 기록 (SPEC §5.2.6): 앱을 쓰기 전에 했던 판단을 넣는다.
+  // 그날 종가로 스냅샷을 복원하되 '사후 입력'으로 표시되고 성과는 따로 집계된다.
+  let backdate = $state(false);
+  const maxDate = todayKst();
 
   // 고를 수 있는 종목: 보유 + 이미 의견이 있는 종목
   const choices = $derived.by(() => {
@@ -36,15 +42,16 @@
     if (!req) return;
     untrack(() => {
       err = "";
+      backdate = false;
       edit = req.edit || null;
       if (edit) {
         sid = edit.security_id;
-        f = { rating: edit.rating, target: String(edit.target_price), horizon: edit.horizon_months, thesis: edit.thesis || "", risks: edit.risks || "" };
+        f = { rating: edit.rating, target: String(edit.target_price), horizon: edit.horizon_months, thesis: edit.thesis || "", risks: edit.risks || "", asOf: "" };
       } else {
         sid = req.securityId ?? null;
         // 최신 의견이 있으면 그 내용을 출발점으로 (업데이트는 새 행)
         const prev = sid != null ? data.views.find((v) => v.security_id === sid) : null;
-        f = prev ? { rating: prev.rating, target: String(prev.target_price), horizon: prev.horizon_months, thesis: prev.thesis || "", risks: prev.risks || "" } : fresh();
+        f = prev ? { rating: prev.rating, target: String(prev.target_price), horizon: prev.horizon_months, thesis: prev.thesis || "", risks: prev.risks || "", asOf: "" } : fresh();
         if (req.prefill) f = { ...f, ...req.prefill };
       }
       open = true;
@@ -73,6 +80,7 @@
     if (sid == null) return (err = "종목을 고르세요");
     if (!f.rating) return (err = "등급을 고르세요");
     if (!(target > 0)) return (err = "목표가를 넣으세요");
+    if (backdate && !f.asOf) return (err = "기록할 과거 날짜를 고르세요");
     busy = true;
     err = "";
     const body = { rating: f.rating, target_price: target, horizon_months: f.horizon, thesis: f.thesis, risks: f.risks };
@@ -81,8 +89,11 @@
         await api("/views/" + edit.id, { method: "PATCH", body });
         toast("의견을 수정했습니다");
       } else {
-        await api("/views", { method: "POST", body: { security_id: sid, ...body, ...(ui.viewForm?.valuation ? { valuation: ui.viewForm.valuation } : {}) } });
-        toast((sec?.name || "") + (previous ? " 투자의견을 업데이트했습니다" : " 커버리지를 개시했습니다"));
+        const asOf = backdate && f.asOf ? { as_of: f.asOf } : {};
+        const r = await api("/views", { method: "POST", body: { security_id: sid, ...body, ...asOf, ...(ui.viewForm?.valuation ? { valuation: ui.viewForm.valuation } : {}) } });
+        toast(r.view.backdated
+          ? (sec?.name || "") + " " + f.asOf + " 의견을 사후 입력으로 기록했습니다 (그날 " + fmt(r.view.price_at) + ")"
+          : (sec?.name || "") + (previous ? " 투자의견을 업데이트했습니다" : " 커버리지를 개시했습니다"));
       }
       open = false;
       await loadViews();
@@ -121,7 +132,8 @@
 
     <label><span>목표가 ({sec?.currency === "USD" ? "달러" : "원"})</span>
       <input class="num" bind:value={f.target} inputmode="decimal" placeholder={price != null ? String(price) : ""} />
-      {#if upside != null}<em class="num {tone(upside * 1e6)}">{edit ? "기록 시점 대비" : "지금 대비"} {pctSigned(upside)}</em>{/if}
+      {#if backdate}<em>상승여력은 저장할 때 그날 종가 기준으로 계산됩니다</em>
+      {:else if upside != null}<em class="num {tone(upside * 1e6)}">{edit ? "기록 시점 대비" : "지금 대비"} {pctSigned(upside)}</em>{/if}
     </label>
 
     <fieldset>
@@ -132,6 +144,20 @@
         {/each}
       </div>
     </fieldset>
+
+    {#if !edit}
+      <div class="full back">
+        <label class="chk">
+          <input type="checkbox" bind:checked={backdate} />
+          <span>과거 날짜로 기록</span>
+          <InfoTip label="과거 날짜로 기록" text="앱을 쓰기 전에 했던 판단을 넣을 때 씁니다. 그날 종가·그 시점 컨센서스·PER로 스냅샷을 복원하지만, 결과를 알고 적은 기록이라 '사후 입력'으로 표시되고 성과 평가에서도 따로 집계합니다." />
+        </label>
+        {#if backdate}
+          <input type="date" bind:value={f.asOf} max={maxDate} aria-label="기록 날짜" />
+          <em>그 종목의 시세가 있는 날짜만 됩니다.</em>
+        {/if}
+      </div>
+    {/if}
 
     <label class="full"><span>핵심 논리 (한 줄에 하나)</span>
       <textarea bind:value={f.thesis} rows="4" placeholder="예: 데이터센터 수요가 2027년까지 이어짐"></textarea>
@@ -171,6 +197,10 @@
   .seg{display:flex;gap:4px;padding:3px;border-radius:12px;background:var(--bg2)}
   .seg button{flex:1;min-height:38px;border-radius:9px;font-size:13.5px;color:var(--sub)}
   .seg button.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .back{display:flex;flex-direction:column;gap:8px}
+  .back .chk{flex-direction:row;align-items:center;gap:8px}
+  .back .chk input{width:18px;height:18px;min-height:0;accent-color:var(--accent)}
+  .back .chk span{font-size:13.5px;color:var(--sub)}
   .msg{margin-top:10px}
   .acts{display:flex;justify-content:flex-end;gap:8px}
   @media (max-width:420px){ .form{grid-template-columns:minmax(0,1fr)} }

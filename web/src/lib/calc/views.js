@@ -45,12 +45,8 @@ export function progressToTarget(v, price) {
 
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
-/**
- * 성과 요약 (SPEC §5.2.5). 적중률·평균 목표/실제 수익률·MAE는 평가된 것(evaluated_at)만.
- * 진행 중·평가 대기는 따로 센다.
- */
-export function performance(views, today) {
-  const ev = views.filter((v) => v.evaluated_at);
+/** 평가된 의견들의 적중률·평균 수익률·MAE */
+function scored(ev) {
   const hits = ev.filter((v) => v.hit === 1).length;
   return {
     n: ev.length,
@@ -58,8 +54,29 @@ export function performance(views, today) {
     avgTarget: mean(ev.map((v) => v.target_return).filter((x) => x != null)),
     avgActual: mean(ev.map((v) => v.actual_return).filter((x) => x != null)),
     mae: mean(ev.map((v) => v.abs_error).filter((x) => x != null)),
-    inProgress: views.filter((v) => status(v, today) === "in_progress").length,
-    awaiting: views.filter((v) => status(v, today) === "awaiting").length,
+  };
+}
+
+/**
+ * 성과 요약 (SPEC §5.2.5). 적중률·평균 목표/실제 수익률·MAE는 평가된 것(evaluated_at)만.
+ * 진행 중·평가 대기는 따로 센다.
+ *
+ * 과거 날짜로 소급 기록한 의견(backdated, §5.2.6)은 예측이 아니라 사후 입력이라
+ * 본 숫자에 섞지 않고 backdated로 따로 낸다. 기록 시점 가격은 그날 종가라 사실이지만,
+ * 판단 자체는 결과를 알고 적은 것이므로 같이 세면 적중률이 뒤에서 좋아진다.
+ */
+export function performance(views, today) {
+  const live = views.filter((v) => !v.backdated);
+  const back = views.filter((v) => v.backdated);
+  return {
+    ...scored(live.filter((v) => v.evaluated_at)),
+    inProgress: live.filter((v) => status(v, today) === "in_progress").length,
+    awaiting: live.filter((v) => status(v, today) === "awaiting").length,
+    backdated: {
+      ...scored(back.filter((v) => v.evaluated_at)),
+      total: back.length,
+      inProgress: back.filter((v) => status(v, today) === "in_progress").length,
+    },
   };
 }
 

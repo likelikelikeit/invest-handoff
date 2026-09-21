@@ -52,7 +52,7 @@ SEC_USER_AGENT="이름 이메일" node scripts/sec-history.mjs   # 미국 종목
 | `GET /prices/:id?range=1m\|3m\|1y\|3y\|5y\|10y\|max` | 일봉 `[[date,o,h,l,c,v]]` + 전체 이력 first/last/count |
 | `POST /prices/:id/backfill` | 이력이 비었으면 5년, 있으면 최근 5일 |
 | `GET /views?security_id=&rating=&from=`, `GET /views/latest` | 투자의견 이력 필터 조회, 종목별 최신 의견 조회 |
-| `POST /views`, `PATCH·DELETE /views/:id` | 새 투자의견 기록, 기존 의견 편집·삭제 |
+| `POST /views`, `PATCH·DELETE /views/:id` | 새 투자의견 기록, 기존 의견 편집·삭제. `as_of: "YYYY-MM-DD"`를 주면 그날 종가로 소급 기록(`backdated`) |
 | `GET /fundamentals/:id` | 분기·연간 재무, 최근 컨센서스, 다음 실적일 |
 | `POST /fundamentals/:id/refresh` | 해당 종목 재무·컨센서스 즉시 갱신 |
 | `GET·POST /scenarios?security_id=`, `DELETE /scenarios/:id` | 종목별 bear/base/bull 밸류에이션 가정 조회·저장·삭제 |

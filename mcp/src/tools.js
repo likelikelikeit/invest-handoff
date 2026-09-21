@@ -109,7 +109,7 @@ async function getPortfolio(env) {
 const VIEW_COLS =
   "v.id, v.created_at, v.edited_at, v.rating, v.target_price, v.target_ccy, v.horizon_months, v.thesis, v.risks, " +
   "v.price_at, v.upside_pct, v.consensus_target_at, v.per_at, " +
-  "v.evaluated_at, v.hit, v.hit_date, v.price_at_horizon, v.actual_return, v.target_return, v.abs_error, " +
+  "v.evaluated_at, v.hit, v.hit_date, v.price_at_horizon, v.actual_return, v.target_return, v.abs_error, v.backdated, " +
   "s.name, s.ticker, s.market, s.currency";
 
 function viewOut(v) {
@@ -118,6 +118,8 @@ function viewOut(v) {
     created_at: v.created_at, edited_at: v.edited_at,
     rating: v.rating, target_price: v.target_price, horizon_months: v.horizon_months,
     price_at_record: v.price_at, upside_at_record_pct: pct(v.upside_pct),
+    // 사후에 과거 날짜로 넣은 기록. 예측이 아니므로 적중률을 말할 때 섞지 않는다 (SPEC §5.2.6).
+    backdated: v.backdated === 1,
     consensus_target_at_record: v.consensus_target_at, per_at_record: round(v.per_at),
     thesis: v.thesis, risks: v.risks,
     evaluation: v.evaluated_at
@@ -153,19 +155,22 @@ async function getViews(env, args) {
     "ORDER BY v.created_at DESC, v.id DESC LIMIT ?" + binds.length
   ).bind(...binds).all();
 
+  const summarize = (rows) => (rows.length
+    ? {
+        n: rows.length,
+        hit_rate_pct: pct(rows.filter((v) => v.hit === 1).length / rows.length),
+        mean_abs_error_pct: pct(rows.reduce((a, b) => a + (b.abs_error || 0), 0) / rows.length),
+      }
+    : null);
   const done = results.filter((v) => v.evaluated_at);
   return {
     as_of: nowKst(),
     scope: latestOnly ? "종목별 현재 의견(최신 행)" : args.ticker ? "이 종목의 의견 이력" : "전체 의견 이력(최신순)",
-    rule: "의견은 덮어쓰지 않는 기록이다. 같은 종목의 여러 행은 시간에 따른 생각의 변화다.",
+    rule: "의견은 덮어쓰지 않는 기록이다. 같은 종목의 여러 행은 시간에 따른 생각의 변화다. " +
+      "backdated=true인 행은 과거 날짜로 소급 입력한 것이라 예측 성적에 섞지 않는다.",
     count: results.length,
-    evaluated_summary: done.length
-      ? {
-          n: done.length,
-          hit_rate_pct: pct(done.filter((v) => v.hit === 1).length / done.length),
-          mean_abs_error_pct: pct(done.reduce((a, b) => a + (b.abs_error || 0), 0) / done.length),
-        }
-      : null,
+    evaluated_summary: summarize(done.filter((v) => v.backdated !== 1)),
+    backdated_summary: summarize(done.filter((v) => v.backdated === 1)),
     views: results.map(viewOut),
   };
 }

@@ -95,4 +95,64 @@ describe("views (실제 SQLite)", () => {
     expect((await body(await deleteView({}, env, H, { id: v.id }))).ok).toBe(true);
     await expect(deleteView({}, env, H, { id: v.id })).rejects.toMatchObject({ status: 404 });
   });
+
+  // ── 소급 기록 (SPEC §5.2.6) ──────────────────────────
+  describe("과거 날짜로 기록", () => {
+    const priceRow = env0 => env0.DB.raw.prepare("INSERT INTO prices (security_id, date, close) VALUES (?, ?, ?)");
+
+    beforeEach(() => {
+      const p = priceRow(env);
+      p.run(5, "2025-06-02", 110);
+      p.run(5, "2025-06-03", 120);   // 소급 기준일
+      p.run(5, "2025-06-04", 130);
+      p.run(5, "2026-09-18", 200);
+      // 컨센서스: 소급일 이전 것만 써야 한다
+      const est = env.DB.raw.prepare("INSERT INTO estimates (security_id, source, as_of, target_price) VALUES (?,?,?,?)");
+      est.run(5, "yahoo", "2025-05-20", 140);
+      est.run(5, "yahoo", "2026-09-15", 320);
+      // 그 시점까지 끝난 네 분기 (PER 계산용). 이후 분기는 섞여도 무시돼야 한다.
+      const fin = env.DB.raw.prepare("INSERT INTO financials (security_id,period_end,period_type,eps,source,fetched_at,currency) VALUES (?,?,'Q',?,'yahoo','2026-09-19','USD')");
+      for (const [date, eps] of [["2024-06-30", 1], ["2024-09-30", 1], ["2024-12-31", 2], ["2025-03-31", 2], ["2026-06-30", 50]]) fin.run(5, date, eps);
+    });
+
+    it("그날 종가·그때 컨센·그때 PER로 얼리고 backdated 표시를 남긴다", async () => {
+      const r = await body(await createView(req({ security_id: 5, rating: "매수", target_price: 150, as_of: "2025-06-03" }), env, H));
+      expect(r.view.backdated).toBe(1);
+      expect(r.view.created_at).toBe("2025-06-03T00:00:00+09:00");
+      expect(r.view.price_at).toBe(120);                 // 지금 시세(200)가 아니라 그날 종가
+      expect(r.view.price_at_source).toBe("close 2025-06-03");
+      expect(r.view.upside_pct).toBeCloseTo(0.25, 6);    // 150 / 120 - 1
+      expect(r.view.consensus_target_at).toBe(140);      // 2026년 컨센이 새어 들어오지 않는다
+      expect(r.view.per_at).toBe(20);                    // 120 / (1+1+2+2)
+    });
+
+    it("휴장일은 직전 거래일 종가를 쓴다", async () => {
+      const r = await body(await createView(req({ security_id: 5, rating: "보유", target_price: 130, as_of: "2025-06-07" }), env, H));
+      expect(r.view.price_at).toBe(130);
+      expect(r.view.price_at_source).toBe("close 2025-06-04");
+    });
+
+    it("시세가 없는 날짜는 거절한다", async () => {
+      await expect(createView(req({ security_id: 5, rating: "매수", target_price: 10, as_of: "2020-01-02" }), env, H))
+        .rejects.toMatchObject({ status: 400 });
+    });
+
+    it("미래 날짜는 거절한다", async () => {
+      await expect(createView(req({ security_id: 5, rating: "매수", target_price: 10, as_of: "2099-01-02" }), env, H))
+        .rejects.toMatchObject({ status: 400 });
+    });
+
+    it("형식이 틀리면 거절한다", async () => {
+      await expect(createView(req({ security_id: 5, rating: "매수", target_price: 10, as_of: "2025/06/03" }), env, H))
+        .rejects.toMatchObject({ status: 400 });
+    });
+
+    it("as_of가 없거나 오늘이면 평소대로 지금 시세로 기록한다", async () => {
+      const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+      const r = await body(await createView(req({ security_id: 5, rating: "매수", target_price: 260, as_of: today }), env, H));
+      expect(r.view.backdated).toBe(0);
+      expect(r.view.price_at).toBe(200);
+      expect(r.view.price_at_source).toMatch(/^yahoo\(delayed\)/);
+    });
+  });
 });

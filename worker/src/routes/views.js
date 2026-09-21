@@ -3,7 +3,7 @@
 // 삭제는 자유 (사용자 결정 2026-09-19).
 
 import { json, HttpError, readJson } from "../lib/http.js";
-import { nowIso } from "../lib/time.js";
+import { nowIso, todayKst } from "../lib/time.js";
 import { quote } from "../sources/yahoo.js";
 import { RATINGS, scoreOf } from "../lib/ratings.js";
 import { perAt } from "../lib/valuation.js";
@@ -102,16 +102,16 @@ export async function latestViews(request, env, headers) {
  * 의견 한 행을 넣는다. 스냅샷(가격·컨센·PER)과 기록 시각을 밖에서 준다.
  * 앱에서 바로 기록할 때는 '지금'이지만, MCP 초안을 승인할 때는 제출 시점을 그대로 쓴다 (SPEC §7.9).
  */
-export async function insertView(env, { securityId, currency, createdAt, fields: f, snapshot }) {
+export async function insertView(env, { securityId, currency, createdAt, fields: f, snapshot, backdated = false }) {
   const row = await env.DB.prepare(
     "INSERT INTO views (security_id, created_at, rating, rating_score, target_price, target_ccy, horizon_months, thesis, risks, valuation, " +
-    "price_at, price_at_source, upside_pct, consensus_target_at, per_at) " +
-    "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15) RETURNING id"
+    "price_at, price_at_source, upside_pct, consensus_target_at, per_at, backdated) " +
+    "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16) RETURNING id"
   ).bind(
     securityId, createdAt, f.rating, f.rating_score, f.target_price, currency, f.horizon_months,
     f.thesis ?? null, f.risks ?? null, f.valuation ?? null,
     snapshot.price, snapshot.source, f.target_price / snapshot.price - 1,
-    snapshot.consensus ?? null, snapshot.per ?? null
+    snapshot.consensus ?? null, snapshot.per ?? null, backdated ? 1 : 0
   ).first();
   const v = await env.DB.prepare(SELECT + "WHERE v.id = ?1").bind(row.id).first();
   return out(v);
@@ -119,13 +119,63 @@ export async function insertView(env, { securityId, currency, createdAt, fields:
 
 export { fields as viewFields };
 
-// POST /views — 새 의견. 스냅샷은 서버가 얼린다.
+// ── 소급 기록 (SPEC §5.2.6) ────────────────────────────
+// 앱을 만들기 전에 실제로 했던 판단을 넣을 수 있게 한다. 가격은 그날 종가로 복원하므로 사실이지만,
+// 판단 자체는 사후에 적은 것이라 backdated로 표시하고 성과는 따로 센다. 입력은 앱 폼에서만.
+
+const MAX_GAP_DAYS = 7; // 그 날짜 앞뒤로 이만큼 안에 봉이 없으면 거절 (휴장·상장 전)
+
+/** as_of 이전(포함) 마지막 종가. 너무 멀면 null. */
+async function priceAsOf(env, securityId, asOf) {
+  const r = await env.DB.prepare(
+    "SELECT date, close FROM prices WHERE security_id = ?1 AND date <= ?2 ORDER BY date DESC LIMIT 1"
+  ).bind(securityId, asOf).first();
+  if (!r) return null;
+  const gap = (Date.parse(asOf) - Date.parse(r.date)) / 86400000;
+  return gap > MAX_GAP_DAYS ? null : { price: r.close, source: "close " + r.date };
+}
+
+/** 그 시점까지 알려져 있던 컨센 목표가. 이후에 받은 값이 새어 들어가지 않게 as_of로 자른다. */
+async function consensusAsOf(env, securityId, asOf) {
+  const r = await env.DB.prepare(
+    "SELECT target_price FROM estimates WHERE security_id = ?1 AND source IN ('yahoo','naver') AND target_price IS NOT NULL " +
+    "AND as_of <= ?2 ORDER BY as_of DESC LIMIT 1"
+  ).bind(securityId, asOf).first();
+  return r ? r.target_price : null;
+}
+
+/** 'YYYY-MM-DD' 검증. 오늘이거나 미래면 null(= 소급 아님). */
+function asOfDate(value, today) {
+  if (value == null || value === "") return null;
+  const s = String(value).trim();
+  if (!/^\d{4}-\d\d-\d\d$/.test(s)) throw new HttpError(400, "as_of는 YYYY-MM-DD 형식이어야 합니다");
+  if (s > today) throw new HttpError(400, "미래 날짜로는 기록할 수 없습니다");
+  return s === today ? null : s;
+}
+
+// POST /views — 새 의견. 스냅샷은 서버가 얼린다. as_of를 주면 그 날짜로 소급 기록한다.
 export async function createView(request, env, headers) {
   const body = await readJson(request);
   const sid = Number(body.security_id);
   const sec = await env.DB.prepare("SELECT id, ysym, currency FROM securities WHERE id = ?1").bind(sid).first();
   if (!sec) throw new HttpError(404, "종목 " + body.security_id + "이(가) 없습니다");
   const f = fields(body, false);
+  const asOf = asOfDate(body.as_of, todayKst());
+
+  if (asOf) {
+    const px = await priceAsOf(env, sid, asOf);
+    if (!px) throw new HttpError(400, asOf + " 무렵 시세가 없어 그 날짜로는 기록할 수 없습니다 (상승여력을 얼릴 수 없음)");
+    const view = await insertView(env, {
+      securityId: sid, currency: sec.currency, createdAt: asOf + "T00:00:00+09:00", fields: f, backdated: true,
+      snapshot: {
+        price: px.price, source: px.source,
+        consensus: await consensusAsOf(env, sid, asOf),
+        per: await perAt(env, sid, px.price, asOf),
+      },
+    });
+    return json({ ok: true, view }, 200, headers);
+  }
+
   const px = await priceNow(env, sec);
   const view = await insertView(env, {
     securityId: sid, currency: sec.currency, createdAt: nowIso(), fields: f,

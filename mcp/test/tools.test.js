@@ -63,6 +63,23 @@ describe("get_investment_views", () => {
   it("없는 종목이면 등록된 종목을 알려준다", async () => {
     await expect(run("get_investment_views", { ticker: "없는회사" })).rejects.toThrow(/엔비디아/);
   });
+
+  it("사후 입력(backdated)은 예측 성적에서 빼고 따로 센다", async () => {
+    env.DB.raw.prepare(
+      "INSERT INTO views (security_id, created_at, rating, rating_score, target_price, target_ccy, horizon_months, " +
+      "price_at, price_at_source, upside_pct, evaluated_at, hit, actual_return, target_return, abs_error, backdated) " +
+      "VALUES ((SELECT id FROM securities WHERE ticker='NVDA'), '2025-06-03T00:00:00+09:00', '매수', 3, 150, 'USD', 12, " +
+      "120, 'close 2025-06-03', 0.25, '2026-06-03T00:00:00+09:00', 0, 0.1, 0.25, 0.15, 1)"
+    ).run();
+
+    const r = await run("get_investment_views", { ticker: "NVDA" });
+    expect(r.evaluated_summary.n).toBe(1);          // 실시간 기록 1건만
+    expect(r.evaluated_summary.hit_rate_pct).toBe(100);
+    expect(r.backdated_summary.n).toBe(1);          // 사후 입력은 따로
+    expect(r.backdated_summary.hit_rate_pct).toBe(0);
+    expect(r.views.find((v) => v.backdated).created_at).toBe("2025-06-03T00:00:00+09:00");
+    expect(r.rule).toContain("소급");
+  });
 });
 
 describe("get_company_view", () => {

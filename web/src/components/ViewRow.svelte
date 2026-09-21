@@ -32,7 +32,7 @@
 
 <li class="vr" class:open>
   <button class="head" aria-expanded={open} onclick={() => (open = !open)}>
-    <span class="when num">{stamp(v.created_at)}{#if v.edited_at}<em>수정됨</em>{/if}</span>
+    <span class="when num">{stamp(v.created_at)}{#if v.backdated}<em class="back">사후 입력</em>{/if}{#if v.edited_at}<em>수정됨</em>{/if}</span>
     <span class="main">
       {#if showName}<span class="nm">{v.name}</span>{/if}
       <RatingChip rating={v.rating} score={v.rating_score} />
@@ -50,6 +50,7 @@
         <div><dt>목표 시점</dt><dd>{v.horizon_months}개월 · {horizonEnd(v.created_at, v.horizon_months)}</dd></div>
         <div><dt>상태</dt><dd>{st === "in_progress" ? "진행 중 " + Math.round(elapsed(v, today) * 100) + "%" : st === "awaiting" ? "평가 대기" : "평가됨"}</dd></div>
         {#if v.consensus_target_at}<div><dt>그때 컨센 목표가</dt><dd>{fmt(v.consensus_target_at)}</dd></div>{/if}
+        {#if v.backdated}<div><dt>기록 방식</dt><dd>사후 입력 · 성과는 따로 집계</dd></div>{/if}
       </dl>
       {#if v.thesis}<h4>핵심 논리</h4><ul class="pts">{#each v.thesis.split("\n").filter(Boolean) as t, i (i)}<li>{t}</li>{/each}</ul>{/if}
       {#if v.risks}<h4>리스크</h4><ul class="pts">{#each v.risks.split("\n").filter(Boolean) as t, i (i)}<li>{t}</li>{/each}</ul>{/if}
@@ -69,6 +70,7 @@
   .head:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:10px}
   .when{grid-area:when;font-size:12px;color:var(--sub2)}
   .when em{font-style:normal;margin-left:6px;color:var(--orange)}
+  .when em.back{color:var(--sub2)}
   .main{grid-area:main;display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
   .nm{font-size:15px;font-weight:600}
   .tp{font-size:13.5px;color:var(--sub)}
