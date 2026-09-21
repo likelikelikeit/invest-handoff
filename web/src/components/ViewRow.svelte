@@ -5,7 +5,8 @@
   import { ui, toast } from "../lib/ui.svelte.js";
   import { loadViews, nativePrice } from "../lib/data.svelte.js";
   import { returnSince, status, elapsed, horizonEnd } from "../lib/calc/views.js";
-  import { valueFmt, pctSigned, tone, stamp } from "../lib/format.js";
+  import { valueFmt, pctSigned, tone, stamp, textBlocks } from "../lib/format.js";
+  import { VALUATION_METRICS } from "../lib/calc/valuation.js";
   import { todayKst } from "../lib/today.js";
 
   let { v, showName = true, ondeleted } = $props();
@@ -16,6 +17,14 @@
   const since = $derived(returnSince(v, price));
   const today = todayKst();
   const st = $derived(status(v, today));
+
+  // 목표가 근거: EPS 8.20 × PER 32 = 262.40 (밸류에이션 밴드에서 넘어온 가정도 같은 모양)
+  const basis = $derived.by(() => {
+    const a = v.valuation;
+    const m = a && VALUATION_METRICS.find((x) => x.key === a.metric);
+    if (!m || !(a.value > 0) || !(a.multiple > 0)) return null;
+    return { label: m.label, valueLabel: m.valueLabel, value: a.value, multiple: a.multiple, target: a.value * a.multiple };
+  });
 
   async function del() {
     if (!confirm((v.name || "") + " " + stamp(v.created_at) + " 의견을 지울까요? 되돌릴 수 없습니다.")) return;
@@ -51,9 +60,14 @@
         <div><dt>상태</dt><dd>{st === "in_progress" ? "진행 중 " + Math.round(elapsed(v, today) * 100) + "%" : st === "awaiting" ? "평가 대기" : "평가됨"}</dd></div>
         {#if v.consensus_target_at}<div><dt>그때 컨센 목표가</dt><dd>{fmt(v.consensus_target_at)}</dd></div>{/if}
         {#if v.backdated}<div><dt>기록 방식</dt><dd>사후 입력 · 성과는 따로 집계</dd></div>{/if}
+        {#if basis}
+          <div class="wide"><dt>목표가 근거</dt>
+            <dd>{basis.valueLabel} {basis.value.toLocaleString("ko-KR")} × {basis.label} {basis.multiple} = {fmt(basis.target)}</dd>
+          </div>
+        {/if}
       </dl>
-      {#if v.thesis}<h4>핵심 논리</h4><ul class="pts">{#each v.thesis.split("\n").filter(Boolean) as t, i (i)}<li>{t}</li>{/each}</ul>{/if}
-      {#if v.risks}<h4>리스크</h4><ul class="pts">{#each v.risks.split("\n").filter(Boolean) as t, i (i)}<li>{t}</li>{/each}</ul>{/if}
+      {#if v.thesis}<h4>핵심 논리</h4>{@render body(textBlocks(v.thesis))}{/if}
+      {#if v.risks}<h4>리스크</h4>{@render body(textBlocks(v.risks))}{/if}
       {#if v.edited_at}<p class="edited">수정됨 · {stamp(v.edited_at)}</p>{/if}
       <div class="acts">
         <button class="btn sm" onclick={() => (ui.viewForm = { edit: v })}>편집</button>
@@ -62,6 +76,14 @@
     </div>
   {/if}
 </li>
+
+{#snippet body(blocks)}
+  {#if blocks[0]?.kind === "p"}
+    {#each blocks as b, i (i)}<p class="para">{b.text}</p>{/each}
+  {:else}
+    <ul class="pts">{#each blocks as b, i (i)}<li>{b.text}</li>{/each}</ul>
+  {/if}
+{/snippet}
 
 <style>
   .vr{border-bottom:1px solid var(--line-soft)}
@@ -82,6 +104,9 @@
   .meta dd{font-size:14px;font-weight:560}
   h4{font-size:12.5px;color:var(--sub);font-weight:600;margin:10px 0 4px}
   .pts{padding-left:18px;font-size:14px;line-height:1.55}
+  .para{font-size:14px;line-height:1.65;margin:0 0 10px;white-space:pre-wrap;word-break:keep-all}
+  .para:last-child{margin-bottom:0}
+  .meta .wide{grid-column:1/-1}
   .edited{font-size:12px;color:var(--orange);margin-top:8px}
   .acts{display:flex;gap:8px;margin-top:12px}
   .danger{color:var(--red)}

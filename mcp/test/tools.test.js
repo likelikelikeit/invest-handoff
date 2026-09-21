@@ -64,6 +64,19 @@ describe("get_investment_views", () => {
     await expect(run("get_investment_views", { ticker: "없는회사" })).rejects.toThrow(/엔비디아/);
   });
 
+  it("목표가 근거(EPS × PER)를 같이 준다", async () => {
+    env.DB.raw.prepare(
+      "INSERT INTO views (security_id, created_at, rating, rating_score, target_price, target_ccy, horizon_months, " +
+      "price_at, price_at_source, upside_pct, valuation) VALUES ((SELECT id FROM securities WHERE ticker='005930'), " +
+      "'2026-09-21T10:00:00+09:00', '매수', 3, 96000, 'KRW', 12, 70000, 'close 2026-09-18', 0.371, ?)"
+    ).run(JSON.stringify({ metric: "per", value: 8000, multiple: 12 }));
+
+    const r = await run("get_investment_views", { ticker: "005930" });
+    const v = r.views[0];
+    expect(v.target_basis).toMatchObject({ metric: "per", value: 8000, multiple: 12, implied_target: 96000 });
+    expect(v.target_basis.text).toBe("EPS 8000 × PER 12");
+  });
+
   it("사후 입력(backdated)은 예측 성적에서 빼고 따로 센다", async () => {
     env.DB.raw.prepare(
       "INSERT INTO views (security_id, created_at, rating, rating_score, target_price, target_ccy, horizon_months, " +

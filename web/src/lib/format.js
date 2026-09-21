@@ -79,3 +79,18 @@ export function parseNum(v) {
   const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ""));
   return Number.isFinite(n) ? n : 0;
 }
+
+/**
+ * 핵심 논리·리스크 본문 (SPEC §5.2.1). 쓴 모양을 그대로 살린다.
+ *   빈 줄로 나눠 쓰면 → 문단 (문단 안 줄바꿈도 그대로)
+ *   한 줄씩 쓰면      → 불릿
+ * 길이 제한은 없다. 길게 쓰면 문단 하나가 길어질 뿐이다.
+ */
+export function textBlocks(text) {
+  const t = String(text ?? "").replace(/\r\n/g, "\n").trim();
+  if (!t) return [];
+  if (/\n[ \t]*\n/.test(t)) {
+    return t.split(/\n[ \t]*\n+/).map((b) => b.trim()).filter(Boolean).map((body) => ({ kind: "p", text: body }));
+  }
+  return t.split("\n").map((l) => l.trim()).filter(Boolean).map((body) => ({ kind: "li", text: body }));
+}

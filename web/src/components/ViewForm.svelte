@@ -9,6 +9,7 @@
   import { ui, toast } from "../lib/ui.svelte.js";
   import { data, loadViews, nativePrice, refreshQuotes } from "../lib/data.svelte.js";
   import { RATINGS, HORIZONS, ratingTone } from "../lib/ratings.js";
+  import { VALUATION_METRICS, ttmSeries, baseValue, roundValue } from "../lib/calc/valuation.js";
   import { valueFmt, pctSigned, tone, parseNum, stamp } from "../lib/format.js";
   import { todayKst } from "../lib/today.js";
 
@@ -23,6 +24,14 @@
   function fresh() {
     return { rating: "", target: "", horizon: 12, thesis: "", risks: "", asOf: "" };
   }
+
+  // 밸류에이션으로 목표가 만들기 (SPEC §5.2.7): 기준값 × 배수. 계산은 코드가 한다.
+  // 폼에서는 주당 지표(PER·PBR·PSR)만 받는다. EV/EBITDA는 주식수·순부채가 필요해 밴드 화면 경로를 쓴다.
+  const FORM_METRICS = VALUATION_METRICS.filter((m) => m.key !== "ev_ebitda");
+  let useVal = $state(false);
+  let val = $state({ metric: "per", value: "", multiple: "" });
+  let fund = $state(null);
+  let fundFor = $state(null);
 
   // 소급 기록 (SPEC §5.2.6): 앱을 쓰기 전에 했던 판단을 넣는다.
   // 그날 종가로 스냅샷을 복원하되 '사후 입력'으로 표시되고 성과는 따로 집계된다.
@@ -43,6 +52,8 @@
     untrack(() => {
       err = "";
       backdate = false;
+      useVal = false;
+      val = { metric: "per", value: "", multiple: "" };
       edit = req.edit || null;
       if (edit) {
         sid = edit.security_id;
@@ -69,6 +80,52 @@
     });
   });
 
+  // 블록을 열면 재무를 한 번 받아 TTM 기준값을 제안한다 (있을 때만).
+  $effect(() => {
+    const id = sid;
+    if (!useVal || id == null || fundFor === id) return;
+    untrack(async () => {
+      fundFor = id;
+      fund = null;
+      try {
+        fund = await api("/fundamentals/" + id);
+      } catch {
+        fund = null;
+      }
+      const def = sec?.band_default;
+      if (def && FORM_METRICS.some((m) => m.key === def)) val = { ...val, metric: def };
+    });
+  });
+
+  const metric = $derived(FORM_METRICS.find((m) => m.key === val.metric) || FORM_METRICS[0]);
+
+  /** 앱이 아는 TTM 기준값. 재무 통화가 다르거나 ADR이면 제안하지 않는다(밴드 화면과 같은 기준). */
+  const ttmValue = $derived.by(() => {
+    if (!fund || !sec) return null;
+    const ready = fund.security?.valuation_ready ?? sec.valuation_ready;
+    const srcCcy = fund.security?.financial_currency || sec.financial_currency;
+    const adr = Number(fund.security?.adr_ratio ?? sec.adr_ratio ?? 1);
+    if (ready === false || (srcCcy && sec.currency && srcCcy !== sec.currency) || adr !== 1) return null;
+    const rows = (fund.financials || []).filter((r) => r.currency === sec.currency);
+    const latest = ttmSeries(rows).at(-1);
+    const v = latest ? baseValue(latest, val.metric) : null;
+    return v > 0 ? { value: roundValue(v, val.metric), date: latest.date } : null;
+  });
+
+  const implied = $derived.by(() => {
+    const v = parseNum(val.value);
+    const m = parseNum(val.multiple);
+    return useVal && v > 0 && m > 0 ? v * m : null;
+  });
+
+  // 기준값·배수를 만지면 목표가 칸을 채운다. 그 뒤 목표가를 직접 고치면 그 값이 남는다.
+  $effect(() => {
+    const t = implied;
+    if (t == null) return;
+    const rounded = sec?.currency === "KRW" ? Math.round(t) : Math.round(t * 100) / 100;
+    untrack(() => { f.target = String(rounded); });
+  });
+
   const price = $derived(edit ? edit.price_at : sec ? nativePrice(sec.ysym) : null);
   const fmt = $derived(sec ? valueFmt({ ...sec, asset_class: sec.asset_class || "equity" }) : (v) => String(v));
   const target = $derived(parseNum(f.target));
@@ -90,7 +147,10 @@
         toast("의견을 수정했습니다");
       } else {
         const asOf = backdate && f.asOf ? { as_of: f.asOf } : {};
-        const r = await api("/views", { method: "POST", body: { security_id: sid, ...body, ...asOf, ...(ui.viewForm?.valuation ? { valuation: ui.viewForm.valuation } : {}) } });
+        const valuation = implied != null
+          ? { valuation: { metric: val.metric, value: parseNum(val.value), multiple: parseNum(val.multiple), implied_target: implied } }
+          : ui.viewForm?.valuation ? { valuation: ui.viewForm.valuation } : {};
+        const r = await api("/views", { method: "POST", body: { security_id: sid, ...body, ...asOf, ...valuation } });
         toast(r.view.backdated
           ? (sec?.name || "") + " " + f.asOf + " 의견을 사후 입력으로 기록했습니다 (그날 " + fmt(r.view.price_at) + ")"
           : (sec?.name || "") + (previous ? " 투자의견을 업데이트했습니다" : " 커버리지를 개시했습니다"));
@@ -146,6 +206,36 @@
     </fieldset>
 
     {#if !edit}
+      <div class="full vblock">
+        <label class="chk">
+          <input type="checkbox" bind:checked={useVal} />
+          <span>밸류에이션으로 목표가 계산</span>
+          <InfoTip label="밸류에이션 계산" text="기준값 × 배수로 목표가를 만듭니다. 예: EPS 8.20 × PER 32 = 262.40. 계산한 값은 목표가 칸에 들어가고 직접 고칠 수도 있습니다. 어떤 가정이었는지는 기록에 남습니다." />
+        </label>
+        {#if useVal}
+          <div class="vrow">
+            <SelectField compact bind:value={val.metric} ariaLabel="밸류에이션 지표"
+              options={FORM_METRICS.map((m) => ({ value: m.key, label: m.label }))} />
+            <input class="num" bind:value={val.value} inputmode="decimal" aria-label={metric.valueLabel} placeholder={metric.valueLabel} />
+            <span class="x" aria-hidden="true">×</span>
+            <input class="num" bind:value={val.multiple} inputmode="decimal" aria-label="배수" placeholder="배수" />
+          </div>
+          <div class="vnote">
+            {#if ttmValue}
+              <button class="btn sm" onclick={() => (val = { ...val, value: String(ttmValue.value) })}>
+                TTM {metric.valueLabel} {ttmValue.value.toLocaleString("ko-KR")} 쓰기
+              </button>
+              <em>{ttmValue.date} 기준 · 미래 추정치를 쓰려면 직접 넣으세요</em>
+            {:else if fund}
+              <em>이 종목은 TTM {metric.valueLabel}를 만들 수 없어 직접 넣어야 합니다.</em>
+            {/if}
+          </div>
+          {#if implied != null}
+            <p class="vres num">= {fmt(sec?.currency === "KRW" ? Math.round(implied) : Math.round(implied * 100) / 100)}</p>
+          {/if}
+        {/if}
+      </div>
+
       <div class="full back">
         <label class="chk">
           <input type="checkbox" bind:checked={backdate} />
@@ -159,11 +249,11 @@
       </div>
     {/if}
 
-    <label class="full"><span>핵심 논리 (한 줄에 하나)</span>
-      <textarea bind:value={f.thesis} rows="4" placeholder="예: 데이터센터 수요가 2027년까지 이어짐"></textarea>
+    <label class="full"><span>핵심 논리</span>
+      <textarea bind:value={f.thesis} rows="6" placeholder="줄바꿈으로 나누면 불릿, 빈 줄로 나누면 문단으로 보입니다. 길게 써도 됩니다."></textarea>
     </label>
     <label class="full"><span>리스크</span>
-      <textarea bind:value={f.risks} rows="3" placeholder="예: 고객사 자체 칩 전환"></textarea>
+      <textarea bind:value={f.risks} rows="4" placeholder="예: 고객사 자체 칩 전환"></textarea>
     </label>
   </div>
   {#if err}<p class="msg bad">{err}</p>{/if}
@@ -197,7 +287,14 @@
   .seg{display:flex;gap:4px;padding:3px;border-radius:12px;background:var(--bg2)}
   .seg button{flex:1;min-height:38px;border-radius:9px;font-size:13.5px;color:var(--sub)}
   .seg button.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
-  .back{display:flex;flex-direction:column;gap:8px}
+  .vblock,.back{display:flex;flex-direction:column;gap:8px}
+  .vrow{display:grid;grid-template-columns:minmax(92px,1fr) minmax(0,1.2fr) auto minmax(0,1fr);gap:8px;align-items:center}
+  .vrow .x{font-size:14px;color:var(--sub2);text-align:center}
+  .vnote{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .vres{margin:0;font-size:15px;font-weight:620}
+  .vblock .chk{flex-direction:row;align-items:center;gap:8px}
+  .vblock .chk input{width:18px;height:18px;min-height:0;accent-color:var(--accent)}
+  .vblock .chk span{font-size:13.5px;color:var(--sub)}
   .back .chk{flex-direction:row;align-items:center;gap:8px}
   .back .chk input{width:18px;height:18px;min-height:0;accent-color:var(--accent)}
   .back .chk span{font-size:13.5px;color:var(--sub)}

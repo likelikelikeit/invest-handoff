@@ -109,8 +109,26 @@ async function getPortfolio(env) {
 const VIEW_COLS =
   "v.id, v.created_at, v.edited_at, v.rating, v.target_price, v.target_ccy, v.horizon_months, v.thesis, v.risks, " +
   "v.price_at, v.upside_pct, v.consensus_target_at, v.per_at, " +
-  "v.evaluated_at, v.hit, v.hit_date, v.price_at_horizon, v.actual_return, v.target_return, v.abs_error, v.backdated, " +
+  "v.evaluated_at, v.hit, v.hit_date, v.price_at_horizon, v.actual_return, v.target_return, v.abs_error, v.backdated, v.valuation, " +
   "s.name, s.ticker, s.market, s.currency";
+
+/** views.valuation JSON → 사람이 읽을 근거 한 줄 */
+function valuationOut(raw) {
+  if (!raw) return null;
+  let a;
+  try {
+    a = typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch {
+    return null;
+  }
+  if (!a || !(a.value > 0) || !(a.multiple > 0)) return null;
+  const label = { per: ["EPS", "PER"], pbr: ["BPS", "PBR"], psr: ["주당매출", "PSR"], ev_ebitda: ["EBITDA", "EV/EBITDA"] }[a.metric];
+  return {
+    metric: a.metric, value: a.value, multiple: a.multiple,
+    implied_target: round(a.value * a.multiple, 4),
+    text: label ? label[0] + " " + a.value + " × " + label[1] + " " + a.multiple : null,
+  };
+}
 
 function viewOut(v) {
   return {
@@ -122,6 +140,8 @@ function viewOut(v) {
     backdated: v.backdated === 1,
     consensus_target_at_record: v.consensus_target_at, per_at_record: round(v.per_at),
     thesis: v.thesis, risks: v.risks,
+    // 목표가 근거 (있을 때): {metric:'per', value: EPS, multiple: 배수}. 값은 코드가 곱해 둔 것이다.
+    target_basis: valuationOut(v.valuation),
     evaluation: v.evaluated_at
       ? {
           evaluated_at: v.evaluated_at,
