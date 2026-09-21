@@ -66,6 +66,7 @@
           </div>
         {/if}
       </dl>
+      {#if v.conclusion}<h4>결론</h4>{@render body(textBlocks(v.conclusion))}{/if}
       {#if v.thesis}<h4>핵심 논리</h4>{@render body(textBlocks(v.thesis))}{/if}
       {#if v.risks}<h4>리스크</h4>{@render body(textBlocks(v.risks))}{/if}
       {#if v.edited_at}<p class="edited">수정됨 · {stamp(v.edited_at)}</p>{/if}

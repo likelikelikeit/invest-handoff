@@ -11,6 +11,7 @@
   import { RATINGS, HORIZONS, ratingTone } from "../lib/ratings.js";
   import { VALUATION_METRICS, ttmSeries, baseValue, roundValue } from "../lib/calc/valuation.js";
   import { valueFmt, pctSigned, tone, parseNum, stamp } from "../lib/format.js";
+  import { store } from "../lib/storage.js";
   import { todayKst } from "../lib/today.js";
 
   let open = $state(false);
@@ -22,7 +23,38 @@
   let err = $state("");
 
   function fresh() {
-    return { rating: "", target: "", horizon: 12, thesis: "", risks: "", asOf: "" };
+    return { rating: "", target: "", horizon: 12, conclusion: "", thesis: "", risks: "", asOf: "" };
+  }
+
+  // 임시 저장 (기기에만). 시트를 실수로 닫아도 쓰던 내용이 남는다. 저장에 성공하면 지운다.
+  const DRAFT_KEY = "invest.viewdraft";
+  let restored = $state(false);
+
+  const hasContent = () => Boolean(f.conclusion?.trim() || f.thesis?.trim() || f.risks?.trim() || f.target || f.rating);
+
+  function saveDraft() {
+    if (edit || !open) return;
+    if (!hasContent()) return store.remove(DRAFT_KEY);
+    try {
+      store.set(DRAFT_KEY, JSON.stringify({ sid, f, useVal, val, backdate, at: new Date().toISOString() }));
+    } catch { /* 저장 실패는 무시 */ }
+  }
+
+  function readDraft() {
+    try {
+      return JSON.parse(store.get(DRAFT_KEY, "") || "null");
+    } catch {
+      return null;
+    }
+  }
+
+  function dropDraft() {
+    store.remove(DRAFT_KEY);
+    restored = false;
+    f = fresh();
+    useVal = false;
+    backdate = false;
+    val = { metric: "per", value: "", multiple: "" };
   }
 
   // 밸류에이션으로 목표가 만들기 (SPEC §5.2.7): 기준값 × 배수. 계산은 코드가 한다.
@@ -57,13 +89,26 @@
       edit = req.edit || null;
       if (edit) {
         sid = edit.security_id;
-        f = { rating: edit.rating, target: String(edit.target_price), horizon: edit.horizon_months, thesis: edit.thesis || "", risks: edit.risks || "", asOf: "" };
+        f = { rating: edit.rating, target: String(edit.target_price), horizon: edit.horizon_months, conclusion: edit.conclusion || "", thesis: edit.thesis || "", risks: edit.risks || "", asOf: "" };
       } else {
         sid = req.securityId ?? null;
         // 최신 의견이 있으면 그 내용을 출발점으로 (업데이트는 새 행)
         const prev = sid != null ? data.views.find((v) => v.security_id === sid) : null;
-        f = prev ? { rating: prev.rating, target: String(prev.target_price), horizon: prev.horizon_months, thesis: prev.thesis || "", risks: prev.risks || "", asOf: "" } : fresh();
+        f = prev
+          ? { rating: prev.rating, target: String(prev.target_price), horizon: prev.horizon_months, conclusion: "", thesis: prev.thesis || "", risks: prev.risks || "", asOf: "" }
+          : fresh();
         if (req.prefill) f = { ...f, ...req.prefill };
+        // 쓰다 만 게 남아 있으면 되살린다 (같은 종목이거나, 종목을 안 고르고 쓰던 것)
+        const d = readDraft();
+        restored = false;
+        if (d && d.f && (d.sid == null || sid == null || d.sid === sid)) {
+          f = { ...fresh(), ...d.f };
+          sid = d.sid ?? sid;
+          useVal = Boolean(d.useVal);
+          val = d.val || val;
+          backdate = Boolean(d.backdate);
+          restored = true;
+        }
       }
       open = true;
     });
@@ -126,6 +171,13 @@
     untrack(() => { f.target = String(rounded); });
   });
 
+  // 내용이 바뀔 때마다 임시 저장 (기기에만 남는다)
+  $effect(() => {
+    const snapshot = [f.rating, f.target, f.horizon, f.conclusion, f.thesis, f.risks, f.asOf, useVal, val.metric, val.value, val.multiple, sid, backdate];
+    void snapshot;
+    untrack(() => saveDraft());
+  });
+
   const price = $derived(edit ? edit.price_at : sec ? nativePrice(sec.ysym) : null);
   const fmt = $derived(sec ? valueFmt({ ...sec, asset_class: sec.asset_class || "equity" }) : (v) => String(v));
   const target = $derived(parseNum(f.target));
@@ -140,7 +192,7 @@
     if (backdate && !f.asOf) return (err = "기록할 과거 날짜를 고르세요");
     busy = true;
     err = "";
-    const body = { rating: f.rating, target_price: target, horizon_months: f.horizon, thesis: f.thesis, risks: f.risks };
+    const body = { rating: f.rating, target_price: target, horizon_months: f.horizon, conclusion: f.conclusion, thesis: f.thesis, risks: f.risks };
     try {
       if (edit) {
         await api("/views/" + edit.id, { method: "PATCH", body });
@@ -156,6 +208,8 @@
           : (sec?.name || "") + (previous ? " 투자의견을 업데이트했습니다" : " 커버리지를 개시했습니다"));
       }
       open = false;
+      store.remove(DRAFT_KEY);
+      restored = false;
       await loadViews();
     } catch (e) {
       err = e.message;
@@ -165,13 +219,19 @@
   }
 </script>
 
-<Sheet bind:open title={formTitle} onclose={() => (ui.viewForm = null)}>
+<Sheet bind:open title={formTitle} onclose={() => (ui.viewForm = null)} guardClose={() => !edit && hasContent()}>
   <div class="form">
+    {#if restored}
+      <p class="draft full">쓰다 만 내용을 불러왔습니다.
+        <button class="btn sm" onclick={dropDraft}>지우고 새로 쓰기</button>
+      </p>
+    {/if}
     {#if edit}
       <p class="lead">{edit.name} · {stamp(edit.created_at)} 기록 · 기록 시점 가격 {fmt(edit.price_at)}은 그대로 두고 '수정됨'이 붙습니다.</p>
     {:else if ui.viewForm && ui.viewForm.securityId == null}
       <label class="full"><span>종목</span>
-        <SelectField bind:value={sid} options={choices.map((c) => ({ value: c.id, label: c.name + " · " + c.ticker }))} ariaLabel="투자의견 종목" />
+        <SelectField bind:value={sid} placeholder="종목을 선택해 주세요" ariaLabel="투자의견 종목"
+          options={choices.map((c) => ({ value: c.id, label: c.name + " · " + c.ticker }))} />
         <em>다른 종목은 종목 화면에서 커버리지를 개시할 수 있습니다.</em>
       </label>
     {:else if sec}
@@ -249,6 +309,11 @@
       </div>
     {/if}
 
+    <label class="full"><span>결론</span>
+      <textarea bind:value={f.conclusion} rows="5"
+        placeholder="예: 2027E EPS 8.2달러에 PER 32배(과거 5년 중간값 28배 + 추론 수요 성장 프리미엄)를 적용해 목표주가 262달러, 현재가 대비 +25%로 매수 의견."></textarea>
+    </label>
+
     <label class="full"><span>핵심 논리</span>
       <textarea bind:value={f.thesis} rows="6" placeholder="줄바꿈으로 나누면 불릿, 빈 줄로 나누면 문단으로 보입니다. 길게 써도 됩니다."></textarea>
     </label>
@@ -298,6 +363,7 @@
   .back .chk{flex-direction:row;align-items:center;gap:8px}
   .back .chk input{width:18px;height:18px;min-height:0;accent-color:var(--accent)}
   .back .chk span{font-size:13.5px;color:var(--sub)}
+  .draft{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0;font-size:13px;color:var(--sub2)}
   .msg{margin-top:10px}
   .acts{display:flex;justify-content:flex-end;gap:8px}
   @media (max-width:420px){ .form{grid-template-columns:minmax(0,1fr)} }

@@ -8,7 +8,7 @@ import { quote } from "../sources/yahoo.js";
 import { RATINGS, scoreOf } from "../lib/ratings.js";
 import { perAt } from "../lib/valuation.js";
 
-const EDITABLE = ["rating", "target_price", "horizon_months", "thesis", "risks", "valuation"];
+const EDITABLE = ["rating", "target_price", "horizon_months", "thesis", "risks", "conclusion", "valuation"];
 
 function text(v) {
   if (v == null) return null;
@@ -36,6 +36,7 @@ function fields(body, partial) {
   }
   if (body.thesis !== undefined) out.thesis = text(body.thesis);
   if (body.risks !== undefined) out.risks = text(body.risks);
+  if (body.conclusion !== undefined) out.conclusion = text(body.conclusion);
   if (body.valuation !== undefined) out.valuation = body.valuation == null ? null : JSON.stringify(body.valuation);
   return out;
 }
@@ -104,12 +105,12 @@ export async function latestViews(request, env, headers) {
  */
 export async function insertView(env, { securityId, currency, createdAt, fields: f, snapshot, backdated = false }) {
   const row = await env.DB.prepare(
-    "INSERT INTO views (security_id, created_at, rating, rating_score, target_price, target_ccy, horizon_months, thesis, risks, valuation, " +
+    "INSERT INTO views (security_id, created_at, rating, rating_score, target_price, target_ccy, horizon_months, thesis, risks, conclusion, valuation, " +
     "price_at, price_at_source, upside_pct, consensus_target_at, per_at, backdated) " +
-    "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16) RETURNING id"
+    "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17) RETURNING id"
   ).bind(
     securityId, createdAt, f.rating, f.rating_score, f.target_price, currency, f.horizon_months,
-    f.thesis ?? null, f.risks ?? null, f.valuation ?? null,
+    f.thesis ?? null, f.risks ?? null, f.conclusion ?? null, f.valuation ?? null,
     snapshot.price, snapshot.source, f.target_price / snapshot.price - 1,
     snapshot.consensus ?? null, snapshot.per ?? null, backdated ? 1 : 0
   ).first();

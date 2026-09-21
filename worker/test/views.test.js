@@ -96,6 +96,21 @@ describe("views (실제 SQLite)", () => {
     await expect(deleteView({}, env, H, { id: v.id })).rejects.toMatchObject({ status: 404 });
   });
 
+  it("결론은 따로 저장되고 편집으로 고칠 수 있다", async () => {
+    const r = await body(await createView(req({
+      security_id: 5, rating: "매수", target_price: 260,
+      conclusion: "  2027E EPS 8.2에 PER 32배를 적용해 목표주가 262달러.\n현재가 대비 +25%로 매수 의견.  ",
+      thesis: "추론 수요",
+    }), env, H));
+    expect(r.view.conclusion).toBe("2027E EPS 8.2에 PER 32배를 적용해 목표주가 262달러.\n현재가 대비 +25%로 매수 의견.");
+    expect(r.view.thesis).toBe("추론 수요");
+
+    const patched = await body(await patchView(req({ conclusion: "멀티플을 28배로 낮춰 목표주가 230달러." }), env, H, { id: r.view.id }));
+    expect(patched.view.conclusion).toBe("멀티플을 28배로 낮춰 목표주가 230달러.");
+    expect(patched.view.edited_at).toBeTruthy();
+    expect(patched.view.price_at).toBe(r.view.price_at);   // 스냅샷은 그대로
+  });
+
   // ── 소급 기록 (SPEC §5.2.6) ──────────────────────────
   describe("과거 날짜로 기록", () => {
     const priceRow = env0 => env0.DB.raw.prepare("INSERT INTO prices (security_id, date, close) VALUES (?, ?, ?)");

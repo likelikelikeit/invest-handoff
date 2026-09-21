@@ -1,7 +1,9 @@
 <script>
   // iOS식 바텀 시트 (SPEC §4.9). 데스크톱에서는 가운데 뜨는 패널.
   // <dialog>를 써서 포커스 가두기·Esc 닫기를 브라우저에 맡긴다.
-  let { open = $bindable(false), title, onclose, children, footer } = $props();
+  // guardClose: 쓰다 만 내용이 있으면 바깥을 눌러도 닫지 않는다 (실수로 날리는 걸 막는다).
+  // 닫으려면 × 또는 Esc. 그쪽은 의도가 분명한 조작이다.
+  let { open = $bindable(false), title, onclose, guardClose, children, footer } = $props();
 
   let dlg = $state();
 
@@ -17,7 +19,9 @@
   }
 
   function backdrop(e) {
-    if (e.target === dlg) dlg.close();
+    if (e.target !== dlg) return;
+    if (guardClose?.()) return;
+    dlg.close();
   }
 </script>
 
