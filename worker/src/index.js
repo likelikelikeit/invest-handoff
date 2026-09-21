@@ -20,6 +20,7 @@ import { getRules, listRules, saveRules, getTech, createCall, patchCall, listCal
 import { listEvents, createEvent, deleteEvent, getMacro, saveDots, refreshMacro } from "./routes/calendar.js";
 import { runMisc, CRON_MISC } from "./cron/misc.js";
 import { listDrafts, applyDraft, discardDraft } from "./routes/drafts.js";
+import { listNotes, listNoteTags, createNote, patchNote, deleteNote } from "./routes/notes.js";
 
 const ID = "(?<id>\\d+)";
 
@@ -76,6 +77,12 @@ const ROUTES = [
   ["GET", "/macro", getMacro],
   ["POST", "/macro/dots", saveDots],
   ["POST", "/macro/refresh", refreshMacro],
+
+  ["GET", "/notes", listNotes],
+  ["POST", "/notes", createNote],
+  ["GET", "/notes/tags", listNoteTags],
+  ["PATCH", "/notes/" + ID, patchNote],
+  ["DELETE", "/notes/" + ID, deleteNote],
 
   ["GET", "/drafts", listDrafts],
   ["POST", "/drafts/" + ID + "/apply", applyDraft],

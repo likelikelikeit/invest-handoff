@@ -191,8 +191,8 @@ describe("/mcp 접근", () => {
 
     const list = await (await call("/mcp", postJson({ jsonrpc: "2.0", id: 2, method: "tools/list" }, auth))).json();
     expect(list.result.tools.map((t) => t.name).sort()).toEqual([
-      "add_investment_view", "get_calendar", "get_company_view", "get_investment_views", "get_macro",
-      "get_pending_drafts", "get_portfolio", "get_tech_calls", "submit_portfolio_import",
+      "add_investment_view", "add_note", "get_calendar", "get_company_view", "get_investment_views", "get_macro",
+      "get_notes", "get_pending_drafts", "get_portfolio", "get_tech_calls", "submit_portfolio_import",
     ]);
 
     // 알림에는 응답하지 않는다

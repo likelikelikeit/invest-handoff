@@ -117,3 +117,37 @@ describe("get_pending_drafts", () => {
     expect(r.drafts[0].from).toBe("Claude");
   });
 });
+
+describe("add_note", () => {
+  it("메모를 초안으로 넣고 종목을 이어 준다", async () => {
+    const r = await run("add_note", {
+      title: "에이전틱 AI 확산으로 CPU 주목",
+      body: "추론이 늘면 서버 CPU 수요도 붙는다.",
+      tags: ["AI", "반도체"],
+      stance: "positive",
+      tickers: ["엔비디아", "없는회사"],
+    });
+
+    expect(r.status).toBe("pending");
+    expect(r.securities).toEqual(["엔비디아(NVDA)"]);
+    expect(r.unknown_tickers).toEqual(["없는회사"]);   // 못 찾은 건 버리지 않고 알려준다
+    expect(r.rule).toContain("채점하지 않는");
+
+    const [d] = drafts();
+    expect(d.kind).toBe("note");
+    const payload = JSON.parse(d.payload);
+    expect(payload).toMatchObject({ title: "에이전틱 AI 확산으로 CPU 주목", stance: "positive", tags: ["AI", "반도체"] });
+    expect(payload.securities).toHaveLength(1);
+    // 실제 메모 테이블은 아직 비어 있다 (승인해야 들어간다)
+    expect(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM notes").get().n).toBe(0);
+  });
+
+  it("제목 없이는 못 넣는다", async () => {
+    await expect(run("add_note", { body: "본문만" })).rejects.toThrow(/제목/);
+    expect(drafts()).toHaveLength(0);
+  });
+
+  it("모르는 방향성은 막는다", async () => {
+    await expect(run("add_note", { title: "x", stance: "매수" })).rejects.toThrow(/stance/);
+  });
+});

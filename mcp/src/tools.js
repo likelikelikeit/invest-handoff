@@ -396,6 +396,61 @@ async function getTechCalls(env, args) {
   };
 }
 
+// ── 7. 테마·섹터 메모 ──────────────────────────────────
+// 종목 의견과 다른 기록이다. 목표가·등급이 없고 성과를 채점하지 않는다 (SPEC §5.9).
+async function getNotes(env, args) {
+  const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 100);
+  const where = [];
+  const binds = [];
+  if (args.tag) {
+    binds.push(String(args.tag));
+    where.push("EXISTS (SELECT 1 FROM json_each(n.tags) WHERE json_each.value = ?" + binds.length + ")");
+  }
+  if (args.ticker) {
+    const sec = await findSecurity(env, args.ticker);
+    binds.push(sec.id);
+    where.push("EXISTS (SELECT 1 FROM note_securities ns WHERE ns.note_id = n.id AND ns.security_id = ?" + binds.length + ")");
+  }
+  binds.push(limit);
+  const { results } = await env.DB.prepare(
+    "SELECT n.* FROM notes n " + (where.length ? "WHERE " + where.join(" AND ") + " " : "") +
+    "ORDER BY n.created_at DESC, n.id DESC LIMIT ?" + binds.length
+  ).bind(...binds).all();
+  if (!results.length) return { as_of: nowKst(), count: 0, notes: [] };
+
+  const ids = results.map((r) => r.id);
+  const { results: links } = await env.DB.prepare(
+    "SELECT ns.note_id, s.name, s.ticker, s.currency, " +
+    "(SELECT p.close FROM prices p WHERE p.security_id = s.id AND p.date <= substr(n.created_at, 1, 10) ORDER BY p.date DESC LIMIT 1) AS price_at_note, " +
+    "(SELECT p.close FROM prices p WHERE p.security_id = s.id ORDER BY p.date DESC LIMIT 1) AS last_price " +
+    "FROM note_securities ns JOIN securities s ON s.id = ns.security_id JOIN notes n ON n.id = ns.note_id " +
+    "WHERE ns.note_id IN (" + ids.map((_, i) => "?" + (i + 1)).join(",") + ") ORDER BY s.name"
+  ).bind(...ids).all();
+
+  return {
+    as_of: nowKst(),
+    rule: "메모는 채점하지 않는 기록이다. 연결 종목의 이후 수익률은 사실일 뿐 적중·실패 판정이 아니다. " +
+      "투자의견(views)의 적중률과 섞지 마라.",
+    count: results.length,
+    notes: results.map((n) => ({
+      id: n.id,
+      created_at: n.created_at,
+      backdated: n.backdated === 1,
+      title: n.title,
+      body: n.body,
+      tags: n.tags ? JSON.parse(n.tags) : [],
+      stance: n.stance,
+      edited_at: n.edited_at,
+      securities: links.filter((l) => l.note_id === n.id).map((l) => ({
+        name: l.name, ticker: l.ticker,
+        price_at_note: l.price_at_note,
+        last_price: l.last_price,
+        since_note_pct: l.price_at_note > 0 && l.last_price > 0 ? pct(l.last_price / l.price_at_note - 1) : null,
+      })),
+    })),
+  };
+}
+
 // ── 툴 정의 ─────────────────────────────────────────
 const NO_ARGS = { type: "object", properties: {}, additionalProperties: false };
 const TICKER = { type: "string", description: "종목 티커·야후 심볼·한글 이름 (예: NVDA, 005930, 삼성전자)" };
@@ -452,6 +507,23 @@ export const READ_TOOLS = [
     description: "한·미 기준금리, 국채금리, 물가 등 저장된 거시 시계열의 최신값과 1년 전 대비 변화, 최신 점도표 중간값을 준다.",
     inputSchema: NO_ARGS,
     run: (env) => getMacro(env),
+  },
+  {
+    name: "get_notes",
+    title: "테마·섹터 메모",
+    description:
+      "종목이 아니라 테마·섹터·매크로에 대해 적어 둔 자유 메모를 준다(예: '에이전틱 AI 확산으로 CPU 주목'). " +
+      "목표가·등급이 없는 기록이고, 연결 종목의 기록 이후 수익률은 사실로만 붙는다. 투자의견의 적중률과 섞지 마라.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tag: { type: "string", description: "태그로 거르기 (예: AI, 매크로)" },
+        ticker: TICKER,
+        limit: { type: "integer", description: "최대 건수 (기본 20, 최대 100)" },
+      },
+      additionalProperties: false,
+    },
+    run: (env, args) => getNotes(env, args),
   },
   {
     name: "get_tech_calls",

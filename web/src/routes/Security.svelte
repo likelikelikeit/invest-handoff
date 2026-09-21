@@ -9,6 +9,7 @@
   import Valuation from "../components/Valuation.svelte";
   import MyViews from "../components/MyViews.svelte";
   import TechCalls from "../components/TechCalls.svelte";
+  import SecurityNotes from "../components/SecurityNotes.svelte";
   import RatingChip from "../components/RatingChip.svelte";
   import SelectField from "../components/SelectField.svelte";
   import { upsideNow } from "../lib/calc/views.js";
@@ -164,6 +165,10 @@
 
       <Section id="sd-views" title="투자의견 이력" note={view ? "최근 " + stamp(view.created_at) : ""}>
         <MyViews {id} fmt={valueFmt(sec)} />
+      </Section>
+
+      <Section id="sd-notes" title="관련 메모" note="테마·섹터" defaultOpen={false}>
+        <SecurityNotes {id} />
       </Section>
 
       <Section id="sd-tech" title="기술적 분석 기록" note="매매 적합도 · 투자의견과 별개" defaultOpen={false}>

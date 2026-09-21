@@ -61,6 +61,7 @@ SEC_USER_AGENT="이름 이메일" node scripts/sec-history.mjs   # 미국 종목
 | `GET·POST /tech/rules`, `GET /tech/rules/history` | 판정 규칙(저장 = 새 버전) |
 | `GET /events?from=&to=`, `POST /events`, `DELETE /events/:id` | 일정 조회·직접 추가·삭제(직접 넣은 것만) |
 | `GET /macro?from=`, `POST /macro/dots`, `POST /macro/refresh?backfill=1` | 거시 시계열·점도표 입력·즉시 갱신 |
+| `GET·POST /notes`, `PATCH·DELETE /notes/:id`, `GET /notes/tags` | 테마·섹터 메모(§5.9). `?tag=&security_id=&stance=` 필터, `as_of`로 소급 기록 |
 | `GET /drafts?status=pending\|applied\|discarded\|all` | MCP가 넣은 초안 대기열 |
 | `POST /drafts/:id/apply` | 초안 반영. 보유는 `{rows, cash}`를 주면 그쪽이 이김, 의견은 제출 시점으로 기록 |
 | `POST /drafts/:id/discard` | 초안 버리기(기록은 남음) |
@@ -108,6 +109,8 @@ npm test                            # OAuth 전 구간 + 툴 결과 (실제 SQLi
 | `get_tech_calls` | 기술적 판정 기록과 1주·1개월 뒤 가격 |
 | `submit_portfolio_import` | 사진에서 읽은 보유·현금을 **제안**(초안) |
 | `add_investment_view` | 대화에서 정리한 투자의견을 **제안**(제출 시점·가격을 얼려서) |
+| `get_notes` | 테마·섹터 메모와 연결 종목의 기록 이후 수익률(사실) |
+| `add_note` | 테마·섹터 메모를 **제안**(초안) |
 | `get_pending_drafts` | 아직 승인 안 된 제안 목록 |
 
 쓰기 툴은 실제 데이터를 바꾸지 않는다. `import_drafts`에 쌓고, 앱 홈의 **가져오기 대기**에서 확인·수정한 뒤 반영할 때만 보유·현금·의견이 바뀐다(SPEC §7.9). 폰에서 증권사 화면을 Claude/ChatGPT에 찍어 보내면 그쪽 모델이 표를 읽어 넣어 주므로, 앱 안 `/import`용 LLM 키가 없어도 가져오기가 된다.

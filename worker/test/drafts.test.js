@@ -119,6 +119,28 @@ describe("의견 초안 승인", () => {
   });
 });
 
+describe("메모 초안 승인", () => {
+  it("제출 시각으로 메모를 만들고 종목을 잇는다", async () => {
+    const id = insertDraft("note", {
+      title: "에이전틱 AI 확산으로 CPU 주목",
+      body: "추론이 늘면 서버 CPU 수요도 붙는다.",
+      tags: ["AI"], stance: "positive", securities: [ids.nvda],
+    }, "2026-09-21T09:30:00.000Z");
+
+    const r = await body(await applyDraft(req({}), env, H, { id }));
+    expect(r.note.title).toBe("에이전틱 AI 확산으로 CPU 주목");
+    expect(r.note.created_at).toBe("2026-09-21T09:30:00.000Z");
+    expect(r.note.tags).toEqual(["AI"]);
+    expect(r.note.securities.map((s) => s.ticker)).toEqual(["NVDA"]);
+    expect(JSON.parse(env.DB.raw.prepare("SELECT result FROM import_drafts WHERE id = ?").get(id).result).note_id).toBe(r.note.id);
+  });
+
+  it("제목 없는 초안은 400", async () => {
+    const id = insertDraft("note", { body: "본문만" });
+    await expect(applyDraft(req({}), env, H, { id })).rejects.toMatchObject({ status: 400 });
+  });
+});
+
 describe("버리기", () => {
   it("상태만 바꾸고 기록은 남긴다", async () => {
     const id = insertDraft("view", { a: 1 });

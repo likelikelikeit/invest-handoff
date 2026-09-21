@@ -4,6 +4,7 @@
 import { json, HttpError, readJson } from "../lib/http.js";
 import { nowIso } from "../lib/time.js";
 import { insertView, viewFields } from "./views.js";
+import { insertNote, noteFields } from "./notes.js";
 import { mergeRows } from "./portfolio.js";
 import { putCashRows } from "./securities.js";
 
@@ -64,6 +65,17 @@ export async function applyDraft(request, env, headers, p) {
     });
     await resolve(env, p.id, "applied", { view_id: view.id });
     return json({ ok: true, view }, 200, headers);
+  }
+
+  if (d.kind === "note") {
+    const p2 = d.payload;
+    const note = await insertNote(env, {
+      fields: noteFields(p2, false),
+      securities: Array.isArray(p2.securities) ? p2.securities : [],
+      createdAt: d.proposed_at,          // 대화에서 정리한 그 시각
+    });
+    await resolve(env, p.id, "applied", { note_id: note.id });
+    return json({ ok: true, note }, 200, headers);
   }
 
   throw new HttpError(400, "모르는 초안 종류입니다: " + d.kind);

@@ -10,6 +10,7 @@
   import UpcomingBlock from "../components/UpcomingBlock.svelte";
   import MacroBlock from "../components/MacroBlock.svelte";
   import DraftsBlock from "../components/DraftsBlock.svelte";
+  import NotesBlock from "../components/NotesBlock.svelte";
   import { ui } from "../lib/ui.svelte.js";
   import { data, holdings, cash } from "../lib/data.svelte.js";
 </script>
@@ -34,6 +35,9 @@
   <Section id="home-views" title="투자의견" note="지금 상승여력 순">
     {#snippet aside()}<button class="btn sm" onclick={() => (ui.viewForm = {})}>기록</button>{/snippet}
     <ViewsBlock />
+  </Section>
+  <Section id="home-notes" title="테마·메모" note="최근" defaultOpen={false}>
+    <NotesBlock />
   </Section>
   <Section id="home-events" title="다가오는 일정" note="30일" defaultOpen={false}>
     <UpcomingBlock />

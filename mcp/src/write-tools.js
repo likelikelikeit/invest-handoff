@@ -158,6 +158,59 @@ async function addView(env, args, ctx) {
   };
 }
 
+// ── 테마·섹터 메모 제안 ────────────────────────────────
+const STANCES = ["positive", "neutral", "negative"];
+
+async function addNote(env, args, ctx) {
+  const title = String(args.title || "").trim();
+  if (!title) throw new ToolError("제목이 필요합니다");
+  if (title.length > 200) throw new ToolError("제목은 200자까지입니다");
+  if (args.stance != null && args.stance !== "" && !STANCES.includes(args.stance)) {
+    throw new ToolError("stance는 " + STANCES.join(" | ") + " 중 하나여야 합니다");
+  }
+  const tags = (Array.isArray(args.tags) ? args.tags : []).map((t) => String(t).trim()).filter(Boolean).slice(0, 12);
+
+  // 종목 연결: 못 찾은 이름은 버리지 않고 사용자에게 알린다
+  const securities = [];
+  const unknown = [];
+  for (const t of (Array.isArray(args.tickers) ? args.tickers : []).slice(0, 20)) {
+    try {
+      const sec = await findSecurity(env, t);
+      if (!securities.some((s) => s.id === sec.id)) securities.push({ id: sec.id, name: sec.name, ticker: sec.ticker });
+    } catch {
+      unknown.push(String(t));
+    }
+  }
+
+  const proposedAt = new Date().toISOString();
+  const id = await insertDraft(env, {
+    kind: "note", clientName: ctx?.clientName, proposedAt,
+    payload: {
+      title,
+      body: args.body ? String(args.body).trim() : null,
+      tags,
+      stance: args.stance || null,
+      securities: securities.map((s) => s.id),
+      security_names: securities.map((s) => s.name),
+    },
+    note: args.note,
+  });
+
+  return {
+    draft_id: id,
+    status: "pending",
+    title,
+    tags,
+    stance: args.stance || null,
+    securities: securities.map((s) => s.name + "(" + s.ticker + ")"),
+    unknown_tickers: unknown,
+    proposed_at: proposedAt,
+    next: "앱 홈의 '가져오기 대기'에서 확인하면 메모로 저장됩니다. 기록 시각은 지금으로 얼려 뒀습니다.",
+    rule: "메모는 채점하지 않는 기록이다. 목표가나 적중 여부를 지어내지 마라. " +
+      "과거 날짜로 남기고 싶다면 앱에서 직접 써야 한다(대화에서는 지금 시각으로만 들어간다).",
+  };
+}
+
 // ── 대기 목록 ───────────────────────────────────────
 async function getPending(env) {
   const { results } = await env.DB.prepare(
@@ -173,7 +226,9 @@ async function getPending(env) {
         draft_id: d.id, kind: d.kind, from: d.client_name, proposed_at: d.proposed_at, note: d.note,
         summary: d.kind === "portfolio"
           ? "보유 " + p.rows.length + "줄" + (p.cash?.length ? " + 현금 " + p.cash.length + "건" : "")
-          : p.name + " " + p.rating + " 목표가 " + p.target_price,
+          : d.kind === "note"
+            ? "메모: " + p.title
+            : p.name + " " + p.rating + " 목표가 " + p.target_price,
       };
     }),
     next: results.length ? "앱 홈의 '가져오기 대기'에서 반영하거나 버릴 수 있습니다." : "대기 중인 제안이 없습니다.",
@@ -251,6 +306,27 @@ export const WRITE_TOOLS = [
       additionalProperties: false,
     },
     run: (env, args, ctx) => addView(env, args, ctx),
+  },
+  {
+    name: "add_note",
+    title: "테마·섹터 메모 제안",
+    description:
+      "종목이 아니라 테마·섹터·매크로에 대해 정리한 생각을 메모로 제안한다(예: '에이전틱 AI 확산으로 CPU 주목'). " +
+      "목표가·등급이 없는 자유 기록이고 성과 평가에 들어가지 않는다. 사용자가 실제로 한 판단만 적고, 모델이 대신 지어내지 마라.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "한 줄 제목" },
+        body: { type: "string", description: "본문. 줄바꿈은 불릿, 빈 줄은 문단으로 보인다" },
+        tags: { type: "array", items: { type: "string" }, description: "자유 태그 (예: AI, 매크로, 반도체)" },
+        stance: { type: "string", enum: STANCES, description: "방향성 (긍정/중립/부정). 등급이 아니다" },
+        tickers: { type: "array", items: { type: "string" }, description: "관련 종목 (티커·한글 이름)" },
+        note: { type: "string", description: "메모에 대한 메모 (선택)" },
+      },
+      required: ["title"],
+      additionalProperties: false,
+    },
+    run: (env, args, ctx) => addNote(env, args, ctx),
   },
   {
     name: "get_pending_drafts",

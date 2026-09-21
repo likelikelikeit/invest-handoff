@@ -5,6 +5,7 @@
   import Gate from "../components/Gate.svelte";
   import Section from "../components/Section.svelte";
   import ViewRow from "../components/ViewRow.svelte";
+  import NoteRow from "../components/NoteRow.svelte";
   import InfoTip from "../components/InfoTip.svelte";
   import SelectField from "../components/SelectField.svelte";
   import { api } from "../lib/api.js";
@@ -15,6 +16,10 @@
   import { pct, pctSigned } from "../lib/format.js";
   import { todayKst } from "../lib/today.js";
 
+  // 종목 의견 / 테마·메모 전환 (SPEC §5.9). 메모는 채점하지 않는 기록이라 성과 블록도 함께 숨긴다.
+  let mode = $state("views");
+  let notes = $state([]);
+  let noteTag = $state("");
   let all = $state([]);
   let fSec = $state("");
   let fRating = $state("");
@@ -29,7 +34,19 @@
       err = e.message;
     }
   }
-  $effect(() => { if (data.loaded) fetchAll(); });
+  async function fetchNotes() {
+    try {
+      notes = (await api("/notes")).notes;
+    } catch {
+      notes = [];
+    }
+  }
+  $effect(() => { if (data.loaded) { fetchAll(); fetchNotes(); } });
+  $effect(() => {
+    const f = () => fetchNotes();
+    window.addEventListener("notes-changed", f);
+    return () => window.removeEventListener("notes-changed", f);
+  });
   $effect(() => {
     const f = () => fetchAll();
     window.addEventListener("views-changed", f);
@@ -44,13 +61,45 @@
   const shown = $derived(all.filter((v) =>
     (!fSec || v.security_id === Number(fSec)) && (!fRating || v.rating === fRating) && (!since || v.created_at >= since)));
   const perf = $derived(performance(all, todayKst()));
+  const noteTags = $derived([...new Set(notes.flatMap((n) => n.tags))].sort((a, b) => a.localeCompare(b, "ko")));
+  const shownNotes = $derived(noteTag ? notes.filter((n) => n.tags.includes(noteTag)) : notes);
 </script>
 
 <PageHead title="투자의견">
-  {#if data.loaded}<button class="btn primary" onclick={() => (ui.viewForm = {})}>커버리지 개시</button>{/if}
+  {#if data.loaded}
+    {#if mode === "views"}
+      <button class="btn primary" onclick={() => (ui.viewForm = {})}>커버리지 개시</button>
+    {:else}
+      <button class="btn primary" onclick={() => (ui.noteForm = {})}>메모 쓰기</button>
+    {/if}
+  {/if}
 </PageHead>
 
 <Gate>
+  <div class="kind-tabs" role="tablist" aria-label="기록 종류">
+    <button role="tab" aria-selected={mode === "views"} class:on={mode === "views"} onclick={() => (mode = "views")}>
+      종목 의견 <span class="num">{all.length}</span>
+    </button>
+    <button role="tab" aria-selected={mode === "notes"} class:on={mode === "notes"} onclick={() => (mode = "notes")}>
+      테마·메모 <span class="num">{notes.length}</span>
+    </button>
+  </div>
+
+  {#if mode === "notes"}
+    <Section id="notes-list" title="테마·섹터 메모" note={shownNotes.length + "건"}>
+      {#if noteTags.length}
+        <div class="filters">
+          <SelectField compact bind:value={noteTag} ariaLabel="태그 필터"
+            options={[{ value: "", label: "모든 태그" }, ...noteTags.map((t) => ({ value: t, label: "#" + t }))]} />
+        </div>
+      {/if}
+      {#if shownNotes.length}
+        <ul class="list">{#each shownNotes as n (n.id)}<NoteRow {n} ontouched={fetchNotes} />{/each}</ul>
+      {:else}
+        <p class="note">{notes.length ? "그 태그의 메모가 없습니다." : "종목이 아니라 테마·섹터·매크로에 대한 생각을 적는 곳입니다. 목표가 없이 자유롭게 쓰고, 과거 날짜로도 기록할 수 있습니다."}</p>
+      {/if}
+    </Section>
+  {:else}
   <Section id="views-perf" title="성과 평가" note="사전 예측만">
     <div class="perf">
       <div class="big">
@@ -92,6 +141,7 @@
       <p class="note">{all.length ? "조건에 맞는 투자의견이 없습니다." : "아직 개시한 커버리지가 없습니다. 종목 화면이나 + 버튼에서 시작하세요."}</p>
     {/if}
   </Section>
+  {/if}
 </Gate>
 
 <style>
@@ -104,6 +154,11 @@
   .small dt{font-size:12px;color:var(--sub2)}
   .small dd{font-size:15px;font-weight:600}
   .note{font-size:13px;color:var(--sub2);margin-top:10px;word-break:keep-all}
+  .kind-tabs{display:flex;gap:4px;padding:3px;margin-bottom:10px;border-radius:13px;background:var(--bg2);width:min(100%,360px)}
+  .kind-tabs button{flex:1;min-height:40px;border-radius:10px;font-size:14px;color:var(--sub)}
+  .kind-tabs button.on{background:color-mix(in srgb,var(--card) 78%,transparent);color:var(--ink);font-weight:680;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+  .kind-tabs span{margin-left:4px;color:var(--sub2);font-size:12px}
+  .kind-tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .back{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--sub2);margin:10px 0 0;word-break:keep-all}
   .criteria{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--sub2)}
   .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
