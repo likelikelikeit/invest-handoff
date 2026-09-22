@@ -46,24 +46,31 @@ export function progressToTarget(v, price) {
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
 /**
- * 성과 요약 (SPEC §5.2.5). 적중률·평균 목표/실제 수익률·MAE는 평가된 것(evaluated_at)만.
- * 진행 중·평가 대기는 따로 센다.
+ * 성과 요약 (SPEC §5.2.5).
  *
- * 과거 날짜로 소급 기록한 의견(backdated, §5.2.6)도 같이 센다 [사용자 결정 2026-09-22].
- * 중요한 판단만 소급해 넣기로 해서 나눌 실익이 없었다. 구분 값은 DB에 계속 쌓이므로
- * 나중에 다시 갈라 보고 싶으면 이 함수만 고치면 된다.
+ * 적중률은 '판정이 끝난' 의견으로 낸다 = 만기 평가된 것 + 기간 중 이미 목표가에 닿은 것(조기 적중).
+ * 적중 기준이 "기간 안에 한 번이라도 도달"이라 닿는 순간 결과가 확정되기 때문이다 [사용자 결정 2026-09-23].
+ * 평균 목표/실제 수익률과 MAE는 만기 종가가 있어야 하므로 만기 평가된 것만으로 낸다.
+ * 그래서 두 표본 수가 다를 수 있다 — 화면에 둘 다 적는다(n, matured).
+ *
+ * 소급 기록(backdated, §5.2.6)도 같이 센다 [사용자 결정 2026-09-22].
  */
 export function performance(views, today) {
-  const ev = views.filter((v) => v.evaluated_at);
-  const hits = ev.filter((v) => v.hit === 1).length;
+  const matured = views.filter((v) => v.evaluated_at);
+  const early = views.filter((v) => !v.evaluated_at && v.hit === 1);
+  const judged = matured.concat(early);
+  const hits = judged.filter((v) => v.hit === 1).length;
+  const open = views.filter((v) => !v.evaluated_at && v.hit !== 1);
   return {
-    n: ev.length,
-    hitRate: ev.length ? hits / ev.length : null,
-    avgTarget: mean(ev.map((v) => v.target_return).filter((x) => x != null)),
-    avgActual: mean(ev.map((v) => v.actual_return).filter((x) => x != null)),
-    mae: mean(ev.map((v) => v.abs_error).filter((x) => x != null)),
-    inProgress: views.filter((v) => status(v, today) === "in_progress").length,
-    awaiting: views.filter((v) => status(v, today) === "awaiting").length,
+    n: judged.length,
+    early: early.length,
+    hitRate: judged.length ? hits / judged.length : null,
+    matured: matured.length,
+    avgTarget: mean(matured.map((v) => v.target_return).filter((x) => x != null)),
+    avgActual: mean(matured.map((v) => v.actual_return).filter((x) => x != null)),
+    mae: mean(matured.map((v) => v.abs_error).filter((x) => x != null)),
+    inProgress: open.filter((v) => status(v, today) === "in_progress").length,
+    awaiting: open.filter((v) => status(v, today) === "awaiting").length,
   };
 }
 

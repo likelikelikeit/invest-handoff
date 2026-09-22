@@ -196,6 +196,12 @@ export async function patchView(request, env, headers, p) {
   if (f.target_price !== undefined) {
     f.upside_pct = f.target_price / cur.price_at - 1;
     cols.push("upside_pct");
+    // 만기 전 목표가를 바꾸면 조기 적중(§5.2.5)은 옛 목표가 기준이라 무효다. 다음 크론이 새 목표가로 다시 본다.
+    if (!cur.evaluated_at && f.target_price !== cur.target_price) {
+      f.hit = null;
+      f.hit_date = null;
+      cols.push("hit", "hit_date");
+    }
   }
   f.edited_at = nowIso();
   cols.push("edited_at");

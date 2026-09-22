@@ -86,4 +86,18 @@ describe("homeRows", () => {
     expect(p.inProgress).toBe(1);     // 소급 기록도 진행 중으로 센다
     expect(p.backdated).toBeUndefined();
   });
+
+  it("기간 중 목표가에 닿은 의견은 적중률에 바로 들어가고, 수익률·MAE는 만기 것만", () => {
+    const matured = { created_at: "2025-01-01T00:00:00+09:00", horizon_months: 6, evaluated_at: "2025-07-02", hit: 0,
+      target_return: 0.3, actual_return: -0.1, abs_error: 0.4 };
+    const early = { created_at: "2026-08-26T00:00:00+09:00", horizon_months: 12, hit: 1, hit_date: "2026-09-21" };
+    const open = { created_at: "2026-09-01T00:00:00+09:00", horizon_months: 12 };
+    const p = performance([matured, early, open], "2026-09-23");
+    expect(p.n).toBe(2);             // 판정 끝난 것 = 만기 1 + 조기 적중 1
+    expect(p.early).toBe(1);
+    expect(p.hitRate).toBe(0.5);
+    expect(p.matured).toBe(1);       // 수익률·MAE 표본은 만기 것만
+    expect(p.mae).toBeCloseTo(0.4);
+    expect(p.inProgress).toBe(1);    // 조기 적중은 '진행 중'에서 빠진다
+  });
 });

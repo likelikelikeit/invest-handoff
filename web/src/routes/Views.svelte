@@ -102,21 +102,22 @@
   {:else}
   <Section id="views-perf" title="성과 평가">
     {#snippet aside()}
-      <InfoTip label="성과 평가 기준" text="목표 시점이 지난 투자의견부터 평가합니다. 적중은 기간 안에 목표가에 한 번이라도 도달한 경우이며, 평균 목표수익률과 평균 실제수익률의 차이로 낙관·비관 편향을 읽을 수 있습니다. 과거 날짜로 소급 기록한 의견도 같이 셉니다." />
+      <InfoTip label="성과 평가 기준" text="적중은 목표 기간 안에 목표가에 한 번이라도 도달한 경우입니다. 도달하는 순간 적중으로 바로 셉니다. 평균 목표·실제 수익률과 MAE(평균 절대 오차: 목표수익률과 실제수익률의 차이를 방향 없이 평균낸 값)는 만기 종가가 있어야 해서 목표 기간이 끝난 의견만으로 냅니다. 과거 날짜로 소급 기록한 의견도 같이 셉니다." />
     {/snippet}
     <div class="perf">
       <div class="big">
         <span class="lbl">적중률</span>
         <span class="v num">{perf.hitRate != null ? pct(perf.hitRate * 100) : "—"}</span>
-        <span class="n num">평가된 의견 {perf.n}건</span>
+        <span class="n num">판정 {perf.n}건{perf.early ? " · 기간 중 도달 " + perf.early + "건 포함" : ""}</span>
       </div>
       <dl class="small num">
         <div><dt>평균 목표수익률</dt><dd>{perf.avgTarget != null ? pctSigned(perf.avgTarget * 100) : "—"}</dd></div>
         <div><dt>평균 실제수익률</dt><dd>{perf.avgActual != null ? pctSigned(perf.avgActual * 100) : "—"}</dd></div>
-        <div><dt>MAE</dt><dd>{perf.mae != null ? pct(perf.mae * 100) + "p" : "—"}</dd></div>
+        <div><dt>MAE <small>평균 오차</small></dt><dd>{perf.mae != null ? pct(perf.mae * 100) + "p" : "—"}</dd></div>
         <div><dt>진행 중</dt><dd>{perf.inProgress}건</dd></div>
         {#if perf.awaiting}<div><dt>평가 대기</dt><dd>{perf.awaiting}건</dd></div>{/if}
       </dl>
+      <p class="basis">수익률·MAE는 목표 기간이 끝난 {perf.matured}건 기준</p>
     </div>
     </Section>
 
@@ -149,6 +150,8 @@
   .small dt{font-size:12px;color:var(--sub2)}
   .small dd{font-size:15px;font-weight:600}
   .note{font-size:13px;color:var(--sub2);margin-top:10px;word-break:keep-all}
+  .basis{grid-column:1/-1;font-size:11.5px;color:var(--sub2);margin:6px 0 0}
+  dt small{font-size:10.5px;margin-left:3px;color:var(--sub2);font-weight:500}
   .kind-tabs{display:flex;gap:4px;padding:3px;margin-bottom:10px;border-radius:13px;background:var(--bg2);width:min(100%,360px)}
   .kind-tabs button{flex:1;min-height:40px;border-radius:10px;font-size:14px;color:var(--sub)}
   .kind-tabs button.on{background:color-mix(in srgb,var(--card) 78%,transparent);color:var(--ink);font-weight:680;box-shadow:0 2px 10px rgba(0,0,0,.08)}

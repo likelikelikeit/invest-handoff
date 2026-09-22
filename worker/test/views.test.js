@@ -96,6 +96,18 @@ describe("views (실제 SQLite)", () => {
     await expect(deleteView({}, env, H, { id: v.id })).rejects.toMatchObject({ status: 404 });
   });
 
+  it("만기 전 목표가를 바꾸면 조기 적중을 지운다 (새 목표가로 다시 판정)", async () => {
+    const r = await body(await createView(req({ security_id: 5, rating: "매수", target_price: 220 }), env, H));
+    env.DB.raw.prepare("UPDATE views SET hit = 1, hit_date = '2026-09-21' WHERE id = ?").run(r.view.id);
+
+    const same = await body(await patchView(req({ thesis: "보완" }), env, H, { id: r.view.id }));
+    expect(same.view.hit).toBe(1);               // 목표가를 안 바꾸면 그대로
+
+    const moved = await body(await patchView(req({ target_price: 300 }), env, H, { id: r.view.id }));
+    expect(moved.view.hit).toBeNull();
+    expect(moved.view.hit_date).toBeNull();
+  });
+
   it("결론은 따로 저장되고 편집으로 고칠 수 있다", async () => {
     const r = await body(await createView(req({
       security_id: 5, rating: "매수", target_price: 260,

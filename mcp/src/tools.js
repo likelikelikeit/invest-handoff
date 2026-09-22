@@ -142,6 +142,7 @@ function viewOut(v) {
     thesis: v.thesis, risks: v.risks, conclusion: v.conclusion,
     // 목표가 근거 (있을 때): {metric:'per', value: EPS, multiple: 배수}. 값은 코드가 곱해 둔 것이다.
     target_basis: valuationOut(v.valuation),
+    target_reached: v.hit === 1 ? { hit_date: v.hit_date, before_horizon_end: !v.evaluated_at } : null,
     evaluation: v.evaluated_at
       ? {
           evaluated_at: v.evaluated_at,
@@ -175,21 +176,24 @@ async function getViews(env, args) {
     "ORDER BY v.created_at DESC, v.id DESC LIMIT ?" + binds.length
   ).bind(...binds).all();
 
-  const summarize = (rows) => (rows.length
-    ? {
-        n: rows.length,
-        hit_rate_pct: pct(rows.filter((v) => v.hit === 1).length / rows.length),
-        mean_abs_error_pct: pct(rows.reduce((a, b) => a + (b.abs_error || 0), 0) / rows.length),
-      }
-    : null);
+  // 적중률은 만기 평가 + 기간 중 목표 도달(조기 적중)로, MAE는 만기 평가된 것만으로 (SPEC §5.2.5)
   const done = results.filter((v) => v.evaluated_at);
+  const judged = results.filter((v) => v.evaluated_at || v.hit === 1);
   return {
     as_of: nowKst(),
     scope: latestOnly ? "종목별 현재 의견(최신 행)" : args.ticker ? "이 종목의 의견 이력" : "전체 의견 이력(최신순)",
     rule: "의견은 덮어쓰지 않는 기록이다. 같은 종목의 여러 행은 시간에 따른 생각의 변화다. " +
       "backdated=true는 과거 날짜로 소급 입력한 것이고, 성과 집계에는 같이 들어간다.",
     count: results.length,
-    evaluated_summary: summarize(done),
+    evaluated_summary: judged.length
+      ? {
+          n: judged.length,
+          early_hits: judged.filter((v) => !v.evaluated_at).length,
+          hit_rate_pct: pct(judged.filter((v) => v.hit === 1).length / judged.length),
+          matured: done.length,
+          mean_abs_error_pct: done.length ? pct(done.reduce((a, b) => a + (b.abs_error || 0), 0) / done.length) : null,
+        }
+      : null,
     views: results.map(viewOut),
   };
 }

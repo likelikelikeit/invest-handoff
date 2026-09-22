@@ -64,6 +64,22 @@ describe("get_investment_views", () => {
     await expect(run("get_investment_views", { ticker: "없는회사" })).rejects.toThrow(/엔비디아/);
   });
 
+  it("기간 중 목표가에 닿은 의견은 적중률에 바로 넣고, MAE는 만기 것만", async () => {
+    env.DB.raw.prepare(
+      "INSERT INTO views (security_id, created_at, rating, rating_score, target_price, target_ccy, horizon_months, " +
+      "price_at, price_at_source, upside_pct, hit, hit_date) VALUES ((SELECT id FROM securities WHERE ticker='NVDA'), " +
+      "'2026-08-26T00:00:00+09:00', '매수', 3, 118, 'USD', 12, 100, 'close', 0.18, 1, '2026-09-21')"
+    ).run();
+    const r = await run("get_investment_views", { ticker: "NVDA" });
+    expect(r.evaluated_summary.n).toBe(2);             // 만기 1 + 조기 적중 1
+    expect(r.evaluated_summary.early_hits).toBe(1);
+    expect(r.evaluated_summary.hit_rate_pct).toBe(100);
+    expect(r.evaluated_summary.matured).toBe(1);       // MAE 표본
+    const v = r.views.find((x) => x.target_reached && x.target_reached.before_horizon_end);
+    expect(v.target_reached.hit_date).toBe("2026-09-21");
+    expect(v.evaluation).toBeNull();
+  });
+
   it("목표가 근거(EPS × PER)를 같이 준다", async () => {
     env.DB.raw.prepare(
       "INSERT INTO views (security_id, created_at, rating, rating_score, target_price, target_ccy, horizon_months, " +

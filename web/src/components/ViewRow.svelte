@@ -41,7 +41,7 @@
     </span>
     <span class="tp num">{fmt(v.target_price)}</span>
 
-    <span class="when num">{dayStamp(v.created_at)}{#if v.edited_at}<em>수정됨</em>{/if}</span>
+    <span class="when num">{dayStamp(v.created_at)}{#if v.hit === 1}<em class="hit">목표 도달</em>{/if}{#if v.edited_at}<em>수정됨</em>{/if}</span>
     <span class="nums num">
       <span class="stat">
         <b class={tone(v.upside_pct * 1e6)}>{pctSigned(v.upside_pct * 100)}</b>
@@ -61,7 +61,7 @@
         {#if basis}<div class="wide"><dt>목표가 산출 방식</dt><dd>{basis}</dd></div>{/if}
         <div><dt>목표 기간</dt><dd>{v.horizon_months}개월 · {horizonEnd(v.created_at, v.horizon_months)}</dd></div>
         <div><dt>목표 기간 진행률</dt>
-          <dd>{st === "in_progress" ? Math.round(elapsed(v, today) * 100) + "%" : st === "awaiting" ? "기간 종료 · 평가 대기" : "평가됨"}</dd>
+          <dd>{st === "in_progress" ? Math.round(elapsed(v, today) * 100) + "%" : st === "awaiting" ? "기간 종료 · 평가 대기" : "평가됨"}{#if v.hit_date} · {dayStamp(v.hit_date + "T00:00:00+09:00")} 목표 도달{/if}</dd>
         </div>
         {#if v.consensus_target_at}<div><dt>그때 컨센 목표가</dt><dd>{fmt(v.consensus_target_at)}</dd></div>{/if}
       </dl>
@@ -103,6 +103,7 @@
   .tp{grid-area:tp;font-size:19px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
   .when{grid-area:when;font-size:12.5px;color:var(--sub2);align-self:center}
   .when em{font-style:normal;margin-left:6px;color:var(--orange)}
+  .when em.hit{color:var(--up);font-weight:600}
   .nums{grid-area:nums;display:flex;gap:18px}
   .stat{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
   .stat b{font-size:17px;font-weight:680;letter-spacing:-.01em}
