@@ -38,8 +38,8 @@
     {/each}
   </ul>
 {:else}
-  <p class="empty">테마·섹터에 대한 생각을 적어두면 여기 모입니다.
-    <button class="btn sm" onclick={() => (ui.noteForm = {})}>메모 쓰기</button>
+  <p class="empty">테마·섹터·매크로에 대한 종합 의견을 적어두면 여기 모입니다.
+    <button class="btn sm" onclick={() => (ui.noteForm = {})}>종합 의견 쓰기</button>
   </p>
 {/if}
 

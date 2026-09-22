@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { textBlocks, won, pctSigned, qtyStr } from "./format.js";
+import { textBlocks, won, pctSigned, qtyStr, slashDate } from "./format.js";
 
 describe("textBlocks", () => {
   it("한 줄씩 쓰면 불릿", () => {
@@ -49,5 +49,13 @@ describe("기존 표기 규칙", () => {
     expect(pctSigned(12.5)).toBe("+12.50%");
     expect(qtyStr(4.134)).toBe("4.134");
     expect(qtyStr(16)).toBe("16");
+  });
+});
+
+describe("slashDate", () => {
+  it("yyyy-mm-dd를 yyyy/mm/dd로", () => {
+    expect(slashDate("2027-08-26")).toBe("2027/08/26");
+    expect(slashDate("2026-09-21T00:00:00+09:00")).toBe("2026/09/21");
+    expect(slashDate(null)).toBe("");
   });
 });

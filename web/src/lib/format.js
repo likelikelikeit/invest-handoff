@@ -93,6 +93,12 @@ export function dayStamp(iso, now = new Date()) {
   return (a.y === b.y ? "" : a.y + "/") + a.m + "/" + a.d;
 }
 
+/** "2027-08-26"(또는 ISO 시각) → "2027/08/26". 투자의견 화면의 전체 날짜 표기 [2026-09-23]. */
+export function slashDate(s) {
+  const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(String(s || ""));
+  return m ? m[1] + "/" + m[2] + "/" + m[3] : "";
+}
+
 export function parseNum(v) {
   const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ""));
   return Number.isFinite(n) ? n : 0;

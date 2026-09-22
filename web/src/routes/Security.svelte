@@ -167,7 +167,7 @@
         <MyViews {id} fmt={valueFmt(sec)} />
       </Section>
 
-      <Section id="sd-notes" title="관련 메모" note="테마·섹터" defaultOpen={false}>
+      <Section id="sd-notes" title="관련 종합 의견" note="테마·섹터" defaultOpen={false}>
         <SecurityNotes {id} />
       </Section>
 

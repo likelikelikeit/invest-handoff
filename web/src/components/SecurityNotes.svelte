@@ -32,9 +32,9 @@
 {#if notes.length}
   <ul class="list">{#each notes as n (n.id)}<NoteRow {n} ontouched={load} />{/each}</ul>
 {:else}
-  <p class="note">이 종목을 연결한 메모가 없습니다.</p>
+  <p class="note">이 종목을 연결한 종합 의견이 없습니다.</p>
 {/if}
-<button class="btn sm" onclick={() => (ui.noteForm = { securityId: id })}>이 종목으로 메모 쓰기</button>
+<button class="btn sm" onclick={() => (ui.noteForm = { securityId: id })}>이 종목으로 종합 의견 쓰기</button>
 
 <style>
   .list{list-style:none;margin:0 0 10px;padding:0}

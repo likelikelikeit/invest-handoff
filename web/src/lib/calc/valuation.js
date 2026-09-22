@@ -153,14 +153,27 @@ export function multipleText(n) {
 }
 
 /**
- * 목표가 산출 방식 한 줄 (SPEC §5.2.7).
- *   "EPS $15.00 × PER 40배 = $600.00"
+ * 목표가 산출 방식을 조각으로 (SPEC §5.2.7). 화면이 숫자만 굵게 쓰려고 나눠 준다.
+ *   { valueLabel: "EPS", value: "$15.00", label: "PER", multiple: "40배", target: "$600.00" }
  * fmt는 종목 통화 표기 함수(valueFmt). EV/EBITDA는 순부채·주식수를 거쳐 주당 목표가가 나오므로
- * 곱셈 결과를 그대로 쓰지 않고 앞부분만 적는다.
+ * 곱셈 결과를 목표가로 쓰지 않는다(target = null).
  */
-export function basisText(a, fmt) {
+export function basisParts(a, fmt) {
   const m = VALUATION_METRICS.find((x) => x.key === a?.metric);
   if (!m || !(a.value > 0) || !(a.multiple > 0)) return null;
-  const head = m.valueLabel + " " + fmt(a.value) + " × " + m.label + " " + multipleText(a.multiple);
-  return m.key === "ev_ebitda" ? head : head + " = " + fmt(a.value * a.multiple);
+  return {
+    valueLabel: m.valueLabel,
+    value: fmt(a.value),
+    label: m.label,
+    multiple: multipleText(a.multiple),
+    target: m.key === "ev_ebitda" ? null : fmt(a.value * a.multiple),
+  };
+}
+
+/** 같은 내용을 한 줄 글로: "EPS $15.00 × PER 40배 = $600.00" */
+export function basisText(a, fmt) {
+  const p = basisParts(a, fmt);
+  if (!p) return null;
+  const head = p.valueLabel + " " + p.value + " × " + p.label + " " + p.multiple;
+  return p.target ? head + " = " + p.target : head;
 }

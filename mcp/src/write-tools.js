@@ -205,8 +205,8 @@ async function addNote(env, args, ctx) {
     securities: securities.map((s) => s.name + "(" + s.ticker + ")"),
     unknown_tickers: unknown,
     proposed_at: proposedAt,
-    next: "앱 홈의 '가져오기 대기'에서 확인하면 메모로 저장됩니다. 기록 시각은 지금으로 얼려 뒀습니다.",
-    rule: "메모는 채점하지 않는 기록이다. 목표가나 적중 여부를 지어내지 마라. " +
+    next: "앱 홈의 '가져오기 대기'에서 확인하면 종합 의견으로 저장됩니다. 기록 시각은 지금으로 얼려 뒀습니다.",
+    rule: "종합 의견은 채점하지 않는 기록이다. 목표가나 적중 여부를 지어내지 마라. " +
       "과거 날짜로 남기고 싶다면 앱에서 직접 써야 한다(대화에서는 지금 시각으로만 들어간다).",
   };
 }
@@ -227,7 +227,7 @@ async function getPending(env) {
         summary: d.kind === "portfolio"
           ? "보유 " + p.rows.length + "줄" + (p.cash?.length ? " + 현금 " + p.cash.length + "건" : "")
           : d.kind === "note"
-            ? "메모: " + p.title
+            ? "종합 의견: " + p.title
             : p.name + " " + p.rating + " 목표가 " + p.target_price,
       };
     }),
@@ -309,9 +309,9 @@ export const WRITE_TOOLS = [
   },
   {
     name: "add_note",
-    title: "테마·섹터 메모 제안",
+    title: "종합 의견 제안",
     description:
-      "종목이 아니라 테마·섹터·매크로에 대해 정리한 생각을 메모로 제안한다(예: '에이전틱 AI 확산으로 CPU 주목'). " +
+      "종목이 아니라 테마·섹터·매크로에 대해 정리한 생각을 종합 의견으로 제안한다(예: '에이전틱 AI 확산으로 CPU 주목'). " +
       "목표가·등급이 없는 자유 기록이고 성과 평가에 들어가지 않는다. 사용자가 실제로 한 판단만 적고, 모델이 대신 지어내지 마라.",
     inputSchema: {
       type: "object",

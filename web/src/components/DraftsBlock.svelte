@@ -24,7 +24,12 @@
     busy = d.id;
     try {
       const r = await api("/drafts/" + d.id + "/apply", { method: "POST", body: {} });
-      toast(r.view.name + " 의견을 기록했습니다 (" + when(r.view.created_at) + " 시점)");
+      if (r.note) {
+        toast("종합 의견을 기록했습니다 (" + when(r.note.created_at) + " 시점)");
+        window.dispatchEvent(new CustomEvent("notes-changed"));
+      } else {
+        toast(r.view.name + " 의견을 기록했습니다 (" + when(r.view.created_at) + " 시점)");
+      }
       await Promise.all([loadDrafts(), loadViews()]);
     } catch (e) {
       toast("실패: " + e.message);
@@ -61,6 +66,18 @@
         <div class="acts">
           <button class="btn sm" onclick={() => discard(d)} disabled={busy === d.id}>버리기</button>
           <button class="btn sm primary" onclick={() => openPortfolio(d)}>확인하고 반영</button>
+        </div>
+      {:else if d.kind === "note"}
+        <!-- 종합 의견 초안 (add_note): 목표가·스냅샷이 없다 -->
+        <p class="title">종합 의견 · {d.payload.title}</p>
+        {#if d.payload.tags?.length || d.payload.security_names?.length}
+          <p class="sub">{[...(d.payload.tags || []).map((t) => "#" + t), ...(d.payload.security_names || [])].join(" · ")}</p>
+        {/if}
+        {#if d.payload.body}<p class="note">{d.payload.body}</p>{/if}
+        <p class="basis">기록 시점 {when(d.proposed_at)}</p>
+        <div class="acts">
+          <button class="btn sm" onclick={() => discard(d)} disabled={busy === d.id}>버리기</button>
+          <button class="btn sm primary" onclick={() => applyView(d)} disabled={busy === d.id}>그대로 기록</button>
         </div>
       {:else}
         <p class="title">{d.payload.name} · {d.payload.rating}</p>

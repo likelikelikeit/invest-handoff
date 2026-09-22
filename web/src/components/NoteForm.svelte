@@ -112,12 +112,12 @@
     try {
       if (edit) {
         await api("/notes/" + edit.id, { method: "PATCH", body });
-        toast("메모를 수정했습니다");
+        toast("종합 의견을 수정했습니다");
       } else {
         const r = await api("/notes", { method: "POST", body });
         store.remove(DRAFT_KEY);
         restored = false;
-        toast(r.note.backdated ? f.asOf + " 메모로 기록했습니다" : "메모를 기록했습니다");
+        toast(r.note.backdated ? f.asOf + " 시점으로 종합 의견을 기록했습니다" : "종합 의견을 기록했습니다");
       }
       open = false;
       window.dispatchEvent(new CustomEvent("notes-changed"));
@@ -129,7 +129,7 @@
   }
 </script>
 
-<Sheet bind:open title={edit ? "메모 편집" : "메모 쓰기"} onclose={() => (ui.noteForm = null)} guardClose={() => !edit && hasContent()}>
+<Sheet bind:open title={edit ? "종합 의견 편집" : "종합 의견 쓰기"} onclose={() => (ui.noteForm = null)} guardClose={() => !edit && hasContent()}>
   <div class="form">
     {#if restored}
       <p class="draft">쓰다 만 내용을 불러왔습니다.
@@ -189,7 +189,7 @@
         <label class="chk">
           <input type="checkbox" bind:checked={backdate} />
           <span>과거 날짜로 기록</span>
-          <InfoTip label="과거 날짜로 기록" text="예전에 가졌던 생각을 지금 적을 때 씁니다. 그 날짜로 기록되고 '사후 입력'으로 표시됩니다. 메모는 채점하지 않으므로 날짜 제약은 없습니다." />
+          <InfoTip label="과거 날짜로 기록" text="예전에 가졌던 생각을 지금 적을 때 씁니다. 그 날짜로 기록되고 '사후 입력'으로 표시됩니다. 종합 의견은 채점하지 않으므로 날짜 제약은 없습니다." />
         </label>
         {#if backdate}<input type="date" bind:value={f.asOf} max={maxDate} aria-label="기록 날짜" />{/if}
       </div>

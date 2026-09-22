@@ -21,10 +21,10 @@
   }));
 
   async function del() {
-    if (!confirm("메모 '" + n.title + "'을(를) 지울까요? 되돌릴 수 없습니다.")) return;
+    if (!confirm("종합 의견 '" + n.title + "'을(를) 지울까요? 되돌릴 수 없습니다.")) return;
     try {
       await api("/notes/" + n.id, { method: "DELETE" });
-      toast("메모를 지웠습니다");
+      toast("종합 의견을 지웠습니다");
       ontouched && ontouched();
     } catch (e) {
       toast("실패: " + e.message);
@@ -71,7 +71,7 @@
             </li>
           {/each}
         </ul>
-        <p class="hint">수익률은 사실만 적습니다. 메모는 적중·실패로 채점하지 않습니다.</p>
+        <p class="hint">수익률은 사실만 적습니다. 종합 의견은 적중·실패로 채점하지 않습니다.</p>
       {/if}
 
       <div class="acts">

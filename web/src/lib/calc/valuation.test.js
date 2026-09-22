@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   ttmSeries, consecutiveQuarters, dailyMultiples, quantile, cleanMultiple, suggestedMultiples,
-  valueFromGrowth, growthFromValue, scenarioTarget, bandPrice, roundValue, basisText, multipleText,
+  valueFromGrowth, growthFromValue, scenarioTarget, bandPrice, roundValue, basisText, basisParts, multipleText,
 } from "./valuation.js";
 
 // 실제 분기 말 (2024-12-31 ~ 2025-12-31)
@@ -75,5 +75,11 @@ describe("목표가 산출 방식 표기", () => {
     expect(multipleText(40)).toBe("40배");
     expect(multipleText(1.2)).toBe("1.2배");
     expect(multipleText(12.5)).toBe("12.5배");
+  });
+
+  it("화면용 조각으로도 나눠 준다 (숫자만 굵게 쓰려고)", () => {
+    expect(basisParts({ metric: "per", value: 15, multiple: 40 }, usd))
+      .toEqual({ valueLabel: "EPS", value: "$15.00", label: "PER", multiple: "40배", target: "$600.00" });
+    expect(basisParts({ metric: "ev_ebitda", value: 2400, multiple: 12 }, usd).target).toBeNull();
   });
 });

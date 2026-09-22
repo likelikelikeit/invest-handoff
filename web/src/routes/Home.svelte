@@ -36,7 +36,7 @@
     {#snippet aside()}<button class="btn sm" onclick={() => (ui.viewForm = {})}>기록</button>{/snippet}
     <ViewsBlock />
   </Section>
-  <Section id="home-notes" title="테마·메모" note="최근" defaultOpen={false}>
+  <Section id="home-notes" title="종합 의견" note="최근" defaultOpen={false}>
     <NotesBlock />
   </Section>
   <Section id="home-events" title="다가오는 일정" note="30일" defaultOpen={false}>

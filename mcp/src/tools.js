@@ -136,7 +136,7 @@ function viewOut(v) {
     created_at: v.created_at, edited_at: v.edited_at,
     rating: v.rating, target_price: v.target_price, horizon_months: v.horizon_months,
     price_at_record: v.price_at, upside_at_record_pct: pct(v.upside_pct),
-    // 사후에 과거 날짜로 넣은 기록. 예측이 아니므로 적중률을 말할 때 섞지 않는다 (SPEC §5.2.6).
+    // 과거 날짜로 소급 기록한 것인지. 성과 집계에는 같이 들어간다 (SPEC §5.2.5·§5.2.6).
     backdated: v.backdated === 1,
     consensus_target_at_record: v.consensus_target_at, per_at_record: round(v.per_at),
     thesis: v.thesis, risks: v.risks, conclusion: v.conclusion,
@@ -432,7 +432,7 @@ async function getNotes(env, args) {
 
   return {
     as_of: nowKst(),
-    rule: "메모는 채점하지 않는 기록이다. 연결 종목의 이후 수익률은 사실일 뿐 적중·실패 판정이 아니다. " +
+    rule: "종합 의견은 채점하지 않는 기록이다. 연결 종목의 이후 수익률은 사실일 뿐 적중·실패 판정이 아니다. " +
       "투자의견(views)의 적중률과 섞지 마라.",
     count: results.length,
     notes: results.map((n) => ({
@@ -513,9 +513,9 @@ export const READ_TOOLS = [
   },
   {
     name: "get_notes",
-    title: "테마·섹터 메모",
+    title: "종합 의견",
     description:
-      "종목이 아니라 테마·섹터·매크로에 대해 적어 둔 자유 메모를 준다(예: '에이전틱 AI 확산으로 CPU 주목'). " +
+      "종목이 아니라 테마·섹터·매크로에 대해 적어 둔 종합 의견(자유 기록)을 준다(예: '에이전틱 AI 확산으로 CPU 주목'). " +
       "목표가·등급이 없는 기록이고, 연결 종목의 기록 이후 수익률은 사실로만 붙는다. 투자의견의 적중률과 섞지 마라.",
     inputSchema: {
       type: "object",

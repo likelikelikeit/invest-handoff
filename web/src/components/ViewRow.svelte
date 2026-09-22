@@ -6,8 +6,8 @@
   import { ui, toast } from "../lib/ui.svelte.js";
   import { loadViews, nativePrice } from "../lib/data.svelte.js";
   import { returnSince, status, elapsed, horizonEnd } from "../lib/calc/views.js";
-  import { basisText } from "../lib/calc/valuation.js";
-  import { valueFmt, pctSigned, tone, stamp, dayStamp, textBlocks } from "../lib/format.js";
+  import { basisParts } from "../lib/calc/valuation.js";
+  import { valueFmt, pctSigned, tone, stamp, dayStamp, slashDate, textBlocks } from "../lib/format.js";
   import { todayKst } from "../lib/today.js";
 
   let { v, showName = true, ondeleted } = $props();
@@ -18,7 +18,7 @@
   const since = $derived(returnSince(v, price));
   const today = todayKst();
   const st = $derived(status(v, today));
-  const basis = $derived(basisText(v.valuation, fmt));
+  const basis = $derived(basisParts(v.valuation, fmt));
 
   async function del() {
     if (!confirm((v.name || "") + " " + stamp(v.created_at) + " 의견을 지울까요? 되돌릴 수 없습니다.")) return;
@@ -54,12 +54,19 @@
 
   {#if open}
     <div class="body">
+      <!-- 2열: 왼쪽 주가·기간, 오른쪽 산출 방식·진행률 (2026-09-23) -->
       <dl class="meta num">
         <div><dt>분석 당시 주가</dt><dd>{fmt(v.price_at)}</dd></div>
-        {#if basis}<div class="wide"><dt>목표가 산출 방식</dt><dd>{basis}</dd></div>{/if}
-        <div><dt>목표 기간</dt><dd>{v.horizon_months}개월 · {horizonEnd(v.created_at, v.horizon_months)}</dd></div>
+        {#if basis}
+          <div><dt>목표가 산출 방식</dt>
+            <dd class="basis">{basis.valueLabel} <b>{basis.value}</b> <i>×</i> {basis.label} <b>{basis.multiple}</b>{#if basis.target} <i>=</i> <b>{basis.target}</b>{/if}</dd>
+          </div>
+        {:else}
+          <div aria-hidden="true"></div>
+        {/if}
+        <div><dt>목표 기간</dt><dd>{v.horizon_months}개월 · {slashDate(horizonEnd(v.created_at, v.horizon_months))}</dd></div>
         <div><dt>목표 기간 진행률</dt>
-          <dd>{st === "in_progress" ? Math.round(elapsed(v, today) * 100) + "%" : st === "awaiting" ? "기간 종료 · 평가 대기" : "평가됨"}{#if v.hit_date} · {dayStamp(v.hit_date + "T00:00:00+09:00")} 목표 도달{/if}</dd>
+          <dd>{st === "in_progress" ? Math.round(elapsed(v, today) * 100) + "%" : st === "awaiting" ? "기간 종료 · 평가 대기" : "평가됨"}{#if v.hit_date} · <span class="hitd">{slashDate(v.hit_date)} 목표 도달</span>{/if}</dd>
         </div>
         {#if v.consensus_target_at}<div><dt>그때 컨센 목표가</dt><dd>{fmt(v.consensus_target_at)}</dd></div>{/if}
       </dl>
@@ -106,8 +113,11 @@
   .nums i{font-style:normal;font-size:11.5px;color:var(--sub2)}
   .nums b{font-size:15.5px;font-weight:650;letter-spacing:-.01em}
   .body{padding:0 0 16px}
-  .meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin-bottom:12px}
-  .meta .wide{grid-column:1/-1}
+  .meta{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:12px 24px;margin-bottom:12px}
+  .meta dd.basis{font-weight:400;line-height:1.5}
+  .meta dd.basis b{font-weight:700}
+  .meta dd.basis i{font-style:normal;color:var(--sub2);margin:0 2px}
+  .hitd{color:var(--up)}
   .meta dt{font-size:12px;color:var(--sub2)}
   .meta dd{font-size:14.5px;font-weight:560}
   h4{font-size:12.5px;color:var(--sub);font-weight:600;margin:12px 0 4px}

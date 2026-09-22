@@ -16,7 +16,7 @@
   import { pct, pctSigned } from "../lib/format.js";
   import { todayKst } from "../lib/today.js";
 
-  // 종목 의견 / 테마·메모 전환 (SPEC §5.9). 메모는 채점하지 않는 기록이라 성과 블록도 함께 숨긴다.
+  // 종목 의견 / 종합 의견 전환 (SPEC §5.9). 종합 의견은 채점하지 않는 기록이라 성과 블록도 함께 숨긴다.
   let mode = $state("views");
   let notes = $state([]);
   let noteTag = $state("");
@@ -70,7 +70,7 @@
     {#if mode === "views"}
       <button class="btn primary" onclick={() => (ui.viewForm = {})}>커버리지 개시</button>
     {:else}
-      <button class="btn primary" onclick={() => (ui.noteForm = {})}>메모 쓰기</button>
+      <button class="btn primary" onclick={() => (ui.noteForm = {})}>종합 의견 쓰기</button>
     {/if}
   {/if}
 </PageHead>
@@ -81,12 +81,12 @@
       종목 의견 <span class="num">{all.length}</span>
     </button>
     <button role="tab" aria-selected={mode === "notes"} class:on={mode === "notes"} onclick={() => (mode = "notes")}>
-      테마·메모 <span class="num">{notes.length}</span>
+      종합 의견 <span class="num">{notes.length}</span>
     </button>
   </div>
 
   {#if mode === "notes"}
-    <Section id="notes-list" title="테마·섹터 메모" note={shownNotes.length + "건"}>
+    <Section id="notes-list" title="종합 의견" note={shownNotes.length + "건"}>
       {#if noteTags.length}
         <div class="filters">
           <SelectField compact bind:value={noteTag} ariaLabel="태그 필터"
@@ -96,7 +96,7 @@
       {#if shownNotes.length}
         <ul class="list">{#each shownNotes as n (n.id)}<NoteRow {n} ontouched={fetchNotes} />{/each}</ul>
       {:else}
-        <p class="note">{notes.length ? "그 태그의 메모가 없습니다." : "종목이 아니라 테마·섹터·매크로에 대한 생각을 적는 곳입니다. 목표가 없이 자유롭게 쓰고, 과거 날짜로도 기록할 수 있습니다."}</p>
+        <p class="note">{notes.length ? "그 태그의 종합 의견이 없습니다." : "종목이 아니라 테마·섹터·매크로에 대한 생각을 적는 곳입니다. 목표가 없이 자유롭게 쓰고, 과거 날짜로도 기록할 수 있습니다."}</p>
       {/if}
     </Section>
   {:else}
