@@ -35,22 +35,20 @@
 
 <li class="vr" class:open>
   <button class="head" aria-expanded={open} onclick={() => (open = !open)}>
-    <span class="main">
-      {#if showName}<span class="nm">{v.name}</span>{/if}
-      <RatingChip rating={v.rating} score={v.rating_score} />
+    <!-- A안(두 줄 압축, 2026-09-23): 종목·날짜는 바짝, 목표가는 가운데 열, 두 수익률은 라벨과 함께 오른쪽에 쌓는다 -->
+    <span class="who">
+      <span class="line1">
+        {#if showName}<span class="nm">{v.name}</span>{/if}
+        <RatingChip rating={v.rating} score={v.rating_score} />
+      </span>
+      <span class="when num">{dayStamp(v.created_at)}{#if v.hit === 1}<em class="hit">목표 도달</em>{/if}{#if v.edited_at}<em>수정됨</em>{/if}</span>
     </span>
     <span class="tp num">{fmt(v.target_price)}</span>
-
-    <span class="when num">{dayStamp(v.created_at)}{#if v.hit === 1}<em class="hit">목표 도달</em>{/if}{#if v.edited_at}<em>수정됨</em>{/if}</span>
     <span class="nums num">
-      <span class="stat">
-        <b class={tone(v.upside_pct * 1e6)}>{pctSigned(v.upside_pct * 100)}</b>
-        <i>분석 당시 상승 여력</i>
-      </span>
-      <span class="stat">
-        <b class={since != null ? tone(since * 1e6) : "flat"}>{since != null ? pctSigned(since * 100) : "—"}</b>
-        <i>분석 이후</i>
-      </span>
+      <i>분석 당시 <span class="long">상승 여력</span></i>
+      <b class={tone(v.upside_pct * 1e6)}>{pctSigned(v.upside_pct * 100)}</b>
+      <i>분석 이후</i>
+      <b class={since != null ? tone(since * 1e6) : "flat"}>{since != null ? pctSigned(since * 100) : "—"}</b>
     </span>
   </button>
 
@@ -95,19 +93,18 @@
 <style>
   .vr{border-bottom:1px solid var(--line-soft)}
   .vr:last-child{border-bottom:none}
-  .head{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"main tp" "when nums";
-    gap:10px 16px;padding:18px 0;text-align:left;align-items:center}
+  .head{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:0 22px;align-items:center;padding:14px 0;text-align:left}
   .head:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:10px}
-  .main{grid-area:main;display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+  .who{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .line1{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
   .nm{font-size:16px;font-weight:650;letter-spacing:-.01em}
-  .tp{grid-area:tp;font-size:19px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
-  .when{grid-area:when;font-size:12.5px;color:var(--sub2);align-self:center}
+  .when{font-size:12.5px;color:var(--sub2)}
   .when em{font-style:normal;margin-left:6px;color:var(--orange)}
   .when em.hit{color:var(--up);font-weight:600}
-  .nums{grid-area:nums;display:flex;gap:18px}
-  .stat{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
-  .stat b{font-size:17px;font-weight:680;letter-spacing:-.01em}
-  .stat i{font-style:normal;font-size:11px;color:var(--sub2)}
+  .tp{font-size:18px;font-weight:700;letter-spacing:-.02em;color:var(--ink);text-align:right}
+  .nums{display:grid;grid-template-columns:auto auto;gap:1px 8px;align-items:baseline;text-align:right}
+  .nums i{font-style:normal;font-size:11.5px;color:var(--sub2)}
+  .nums b{font-size:15.5px;font-weight:650;letter-spacing:-.01em}
   .body{padding:0 0 16px}
   .meta{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin-bottom:12px}
   .meta .wide{grid-column:1/-1}
@@ -120,9 +117,12 @@
   .edited{font-size:12px;color:var(--orange);margin-top:8px}
   .acts{display:flex;gap:8px;margin-top:14px}
   .danger{color:var(--red)}
-  @media (max-width:420px){
-    .nums{gap:12px}
-    .stat b{font-size:15.5px}
-    .tp{font-size:17px}
+  /* 폰 폭: 세 칸을 유지하되 라벨을 줄이고 간격·글자를 한 단계 낮춘다 */
+  @media (max-width:480px){
+    .head{gap:0 12px}
+    .long{display:none}
+    .tp{font-size:16px}
+    .nums b{font-size:14.5px}
+    .nm{font-size:15px}
   }
 </style>
