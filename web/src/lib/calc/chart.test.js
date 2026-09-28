@@ -79,4 +79,16 @@ describe("targetLine", () => {
     expect(targetLine([{ date: "2026-09-10", value: 1 }, { date: "2026-09-10", value: 2 }], rows).map((p) => p.value)).toEqual([2, 2]);
     expect(targetLine([], rows)).toEqual([]);
   });
+  it("커버리지 중단(null)이면 그날까지 긋고 다음 봉에서 끊는다. 재개하면 새 선", () => {
+    const r4 = [["2026-09-01"], ["2026-09-10"], ["2026-09-18"], ["2026-09-25"]];
+    expect(targetLine([{ date: "2026-09-01", value: 100 }, { date: "2026-09-10", value: null }], r4)).toEqual([
+      { time: "2026-09-01", value: 100 }, { time: "2026-09-10", value: 100 }, { time: "2026-09-18" },
+    ]);
+    expect(targetLine([{ date: "2026-08-01", value: 100 }, { date: "2026-09-05", value: null }, { date: "2026-09-18", value: 130 }], r4)).toEqual([
+      { time: "2026-09-01", value: 100 }, { time: "2026-09-05", value: 100 }, { time: "2026-09-10" },
+      { time: "2026-09-18", value: 130 }, { time: "2026-09-25", value: 130 },
+    ]);
+    // 기간 전에 중단된 채면 선이 없다
+    expect(targetLine([{ date: "2026-08-01", value: 100 }, { date: "2026-08-02", value: null }], r4)).toEqual([]);
+  });
 });

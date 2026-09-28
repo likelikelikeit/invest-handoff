@@ -15,3 +15,6 @@ export function scoreOf(label) {
   const r = RATINGS.find((x) => x.label === label);
   return r ? r.score : null;
 }
+
+/** 커버리지 중단 사유 태그 (SPEC §5.2.9). 선택이고 여러 개 고를 수 있다. '투자 논리 훼손'도 매도 의견이 아니다. */
+export const SUSPEND_REASONS = ["밸류에이션 불확실", "사업구조 변화", "정보 부족", "투자 논리 훼손", "기타"];

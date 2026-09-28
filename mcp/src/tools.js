@@ -107,10 +107,25 @@ async function getPortfolio(env) {
 
 // ── 2. 투자의견 ──────────────────────────────────────
 const VIEW_COLS =
-  "v.id, v.created_at, v.edited_at, v.rating, v.target_price, v.target_ccy, v.horizon_months, v.thesis, v.risks, " +
+  "v.id, v.security_id, v.created_at, v.edited_at, v.rating, v.target_price, v.target_ccy, v.horizon_months, v.thesis, v.risks, " +
   "v.price_at, v.upside_pct, v.consensus_target_at, v.per_at, v.conclusion, " +
   "v.evaluated_at, v.hit, v.hit_date, v.price_at_horizon, v.actual_return, v.target_return, v.abs_error, v.backdated, v.valuation, " +
+  "v.withdrawn_at, (SELECT c.price_at FROM coverage_suspensions c WHERE c.view_id = v.id) AS withdrawn_price, " +
   "s.name, s.ticker, s.market, s.currency";
+
+// 지금 커버리지를 중단한 종목 (최신 중단 뒤에 새 의견이 없는 것, SPEC §5.2.9)
+const SUSPENDED_SQL =
+  "SELECT c.security_id, c.created_at, c.reasons, c.memo, c.price_at, s.name, s.ticker FROM coverage_suspensions c " +
+  "JOIN securities s ON s.id = c.security_id WHERE s.archived_at IS NULL " +
+  "AND c.id = (SELECT c2.id FROM coverage_suspensions c2 WHERE c2.security_id = c.security_id ORDER BY julianday(c2.created_at) DESC, c2.id DESC LIMIT 1) " +
+  "AND NOT EXISTS (SELECT 1 FROM views v2 WHERE v2.security_id = c.security_id AND julianday(v2.created_at) > julianday(c.created_at))";
+
+function suspensionOut(c) {
+  return {
+    name: c.name, ticker: c.ticker, suspended_at: c.created_at,
+    reasons: c.reasons ? JSON.parse(c.reasons) : [], memo: c.memo, price_at_suspension: c.price_at,
+  };
+}
 
 /** views.valuation JSON → 사람이 읽을 근거 한 줄 */
 function valuationOut(raw) {
@@ -143,6 +158,13 @@ function viewOut(v) {
     // 목표가 근거 (있을 때): {metric:'per', value: EPS, multiple: 배수}. 값은 코드가 곱해 둔 것이다.
     target_basis: valuationOut(v.valuation),
     target_reached: v.hit === 1 ? { hit_date: v.hit_date, before_horizon_end: !v.evaluated_at } : null,
+    // 커버리지 중단으로 철회된 의견. 정규 적중률·MAE에서 빠지고 따로 센다 (SPEC §5.2.9).
+    withdrawn: v.withdrawn_at
+      ? {
+          at: v.withdrawn_at, price_at_withdrawal: v.withdrawn_price,
+          return_to_withdrawal_pct: v.withdrawn_price > 0 ? pct(v.withdrawn_price / v.price_at - 1) : null,
+        }
+      : null,
     evaluation: v.evaluated_at
       ? {
           evaluated_at: v.evaluated_at,
@@ -171,29 +193,39 @@ async function getViews(env, args) {
     where += "AND v.id = (SELECT v2.id FROM views v2 WHERE v2.security_id = v.security_id ORDER BY v2.created_at DESC, v2.id DESC LIMIT 1) ";
   }
   binds.push(limit);
-  const { results } = await env.DB.prepare(
+  let { results } = await env.DB.prepare(
     "SELECT " + VIEW_COLS + " FROM views v JOIN securities s ON s.id = v.security_id " + where +
     "ORDER BY v.created_at DESC, v.id DESC LIMIT ?" + binds.length
   ).bind(...binds).all();
 
   // 적중률은 만기 평가 + 기간 중 목표 도달(조기 적중)로, MAE는 만기 평가된 것만으로 (SPEC §5.2.5)
+  // 철회된 의견은 정규 표본에서 빠지되, 미적중으로 쳤을 때의 적중률도 같이 준다 (§5.2.9)
+  const suspended = (await env.DB.prepare(SUSPENDED_SQL).all()).results;
+  const off = new Set(suspended.map((c) => c.security_id));
+  if (latestOnly) results = results.filter((v) => !off.has(v.security_id));
   const done = results.filter((v) => v.evaluated_at);
   const judged = results.filter((v) => v.evaluated_at || v.hit === 1);
+  const withdrawn = results.filter((v) => v.withdrawn_at);
+  const hits = judged.filter((v) => v.hit === 1).length;
   return {
     as_of: nowKst(),
     scope: latestOnly ? "종목별 현재 의견(최신 행)" : args.ticker ? "이 종목의 의견 이력" : "전체 의견 이력(최신순)",
     rule: "의견은 덮어쓰지 않는 기록이다. 같은 종목의 여러 행은 시간에 따른 생각의 변화다. " +
-      "backdated=true는 과거 날짜로 소급 입력한 것이고, 성과 집계에는 같이 들어간다.",
+      "backdated=true는 과거 날짜로 소급 입력한 것이고, 성과 집계에는 같이 들어간다. " +
+      "withdrawn이 있으면 커버리지 중단으로 철회된 의견이다(매도 의견이 아니다).",
     count: results.length,
-    evaluated_summary: judged.length
+    evaluated_summary: judged.length || withdrawn.length
       ? {
           n: judged.length,
           early_hits: judged.filter((v) => !v.evaluated_at).length,
-          hit_rate_pct: pct(judged.filter((v) => v.hit === 1).length / judged.length),
+          hit_rate_pct: judged.length ? pct(hits / judged.length) : null,
           matured: done.length,
           mean_abs_error_pct: done.length ? pct(done.reduce((a, b) => a + (b.abs_error || 0), 0) / done.length) : null,
+          withdrawn: withdrawn.length,
+          hit_rate_if_withdrawn_missed_pct: withdrawn.length ? pct(hits / (judged.length + withdrawn.length)) : null,
         }
       : null,
+    suspended_coverage: suspended.filter((c) => !args.ticker || c.security_id === binds[0]).map(suspensionOut),
     views: results.map(viewOut),
   };
 }
@@ -202,7 +234,7 @@ async function getViews(env, args) {
 async function getCompany(env, args) {
   const sec = await findSecurity(env, args.ticker);
   const fx = await fxUsdKrw(env);
-  const [last, range, fin, est, views, calls, events, pos] = await env.DB.batch([
+  const [last, range, fin, est, views, calls, events, pos, susp] = await env.DB.batch([
     env.DB.prepare("SELECT date, close, open, high, low, volume FROM prices WHERE security_id = ?1 ORDER BY date DESC LIMIT 2").bind(sec.id),
     env.DB.prepare(
       "SELECT MAX(high) AS high_52w, MIN(low) AS low_52w, COUNT(*) AS days FROM prices " +
@@ -228,6 +260,7 @@ async function getCompany(env, args) {
       "SELECT date, time, kind, title FROM events WHERE security_id = ?1 AND date >= date('now') ORDER BY date LIMIT 5"
     ).bind(sec.id),
     env.DB.prepare("SELECT qty, avg_price, avg_ccy, updated_at FROM positions WHERE security_id = ?1").bind(sec.id),
+    env.DB.prepare(SUSPENDED_SQL + " AND c.security_id = ?1").bind(sec.id),
   ]);
 
   const price = last.results[0] || null;
@@ -288,6 +321,9 @@ async function getCompany(env, args) {
     },
     financials: fin.results,
     estimates: est.results,
+    coverage: susp.results[0]
+      ? { status: "suspended", ...suspensionOut(susp.results[0]) }
+      : { status: views.results.length ? "active" : "none" },
     views: views.results.map(viewOut),
     recent_tech_calls: calls.results.map(callOut),
     upcoming_events: events.results,

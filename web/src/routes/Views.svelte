@@ -102,13 +102,14 @@
   {:else}
   <Section id="views-perf" title="성과 평가">
     {#snippet aside()}
-      <InfoTip label="성과 평가 기준" text="적중은 목표 기간 안에 목표가에 한 번이라도 도달한 경우입니다. 도달하는 순간 적중으로 바로 셉니다. 평균 목표·실제 수익률과 MAE(평균 절대 오차: 목표수익률과 실제수익률의 차이를 방향 없이 평균낸 값)는 만기 종가가 있어야 해서 목표 기간이 끝난 의견만으로 냅니다. 과거 날짜로 소급 기록한 의견도 같이 셉니다." />
+      <InfoTip label="성과 평가 기준" text="적중은 목표 기간 안에 목표가에 한 번이라도 도달한 경우입니다. 도달하는 순간 적중으로 바로 셉니다. 평균 목표·실제 수익률과 MAE(평균 절대 오차: 목표수익률과 실제수익률의 차이를 방향 없이 평균낸 값)는 만기 종가가 있어야 해서 목표 기간이 끝난 의견만으로 냅니다. 과거 날짜로 소급 기록한 의견도 같이 셉니다. 커버리지 중단으로 철회한 의견은 빼고 따로 셉니다." />
     {/snippet}
     <div class="perf">
       <div class="big">
         <span class="lbl">적중률</span>
         <span class="v num">{perf.hitRate != null ? pct(perf.hitRate * 100) : "—"}</span>
         <span class="n num">판정 {perf.n}건{perf.early ? " · 기간 중 도달 " + perf.early + "건 포함" : ""}</span>
+        {#if perf.withdrawn}<span class="n num">철회 {perf.withdrawn}건 · 포함하면 {pct(perf.hitRateAll * 100)}</span>{/if}
       </div>
       <dl class="small num">
         <div><dt>평균 목표수익률</dt><dd>{perf.avgTarget != null ? pctSigned(perf.avgTarget * 100) : "—"}</dd></div>

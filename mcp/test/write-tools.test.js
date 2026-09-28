@@ -151,3 +151,27 @@ describe("add_note", () => {
     await expect(run("add_note", { title: "x", stance: "매수" })).rejects.toThrow(/stance/);
   });
 });
+
+describe("suspend_coverage", () => {
+  it("중단 초안만 만든다: 철회될 의견과 그때 종가를 얼리고, 의견은 아직 그대로다", async () => {
+    const r = await run("suspend_coverage", { ticker: "NVDA", reasons: ["사업구조 변화"], memo: "M&A 이후 유보" });
+    expect(r.status).toBe("pending");
+    expect(r.withdrawing).toMatchObject({ rating: "적극 매수", target_price: 180 });
+    expect(r.frozen.price_at_suspension).toBeCloseTo(120, 4);
+    const [d] = drafts();
+    expect(d.kind).toBe("suspend");
+    expect(JSON.parse(d.payload)).toMatchObject({ reasons: ["사업구조 변화"], memo: "M&A 이후 유보" });
+    expect(env.DB.raw.prepare("SELECT COUNT(*) n FROM views WHERE withdrawn_at IS NOT NULL").get().n).toBe(0);
+    expect((await run("get_pending_drafts")).drafts[0].summary).toBe("엔비디아 커버리지 중단");
+  });
+
+  it("사유 태그가 틀리거나, 의견이 없거나, 이미 중단했으면 거절", async () => {
+    await expect(run("suspend_coverage", { ticker: "NVDA", reasons: ["매도"] })).rejects.toThrow(/reasons/);
+    env.DB.raw.prepare(
+      "INSERT INTO coverage_suspensions (security_id, created_at) VALUES ((SELECT id FROM securities WHERE ticker='NVDA'), '2026-09-20T09:00:00+09:00')"
+    ).run();
+    await expect(run("suspend_coverage", { ticker: "NVDA" })).rejects.toThrow(/이미/);
+    env.DB.raw.prepare("DELETE FROM views WHERE security_id = (SELECT id FROM securities WHERE ticker='005930')").run();
+    await expect(run("suspend_coverage", { ticker: "005930" })).rejects.toThrow(/개시/);
+  });
+});

@@ -4,7 +4,7 @@
 // 의견은 제출 시각과 그 시점의 가격·컨센서스를 여기서 얼려 둔다. 승인이 며칠 뒤여도
 // 기록 시점은 대화에서 정리한 그 순간으로 남는다.
 
-import { RATINGS, scoreOf } from "../../worker/src/lib/ratings.js";
+import { RATINGS, scoreOf, SUSPEND_REASONS } from "../../worker/src/lib/ratings.js";
 import { perAt } from "../../worker/src/lib/valuation.js";
 import { ToolError, findSecurity, nowKst } from "./tools.js";
 
@@ -211,6 +211,51 @@ async function addNote(env, args, ctx) {
   };
 }
 
+// ── 커버리지 중단 제안 (SPEC §5.2.9) ──────────────────
+// 중단 = 현재 의견 철회 + 새 목표가 제시 중단. 매도 의견이 아니다.
+async function suspendCoverage(env, args, ctx) {
+  const sec = await findSecurity(env, args.ticker);
+  const reasons = [...new Set(Array.isArray(args.reasons) ? args.reasons : [])];
+  const bad = reasons.filter((r) => !SUSPEND_REASONS.includes(r));
+  if (bad.length) throw new ToolError("reasons는 " + SUSPEND_REASONS.join(" | ") + " 중에서 고른다");
+
+  const view = await env.DB.prepare(
+    "SELECT id, created_at, rating, target_price FROM views WHERE security_id = ?1 ORDER BY julianday(created_at) DESC, id DESC LIMIT 1"
+  ).bind(sec.id).first();
+  if (!view) throw new ToolError(sec.name + "은(는) 커버리지를 개시하지 않은 종목입니다");
+  const last = await env.DB.prepare(
+    "SELECT created_at FROM coverage_suspensions WHERE security_id = ?1 ORDER BY julianday(created_at) DESC, id DESC LIMIT 1"
+  ).bind(sec.id).first();
+  if (last && Date.parse(last.created_at) >= Date.parse(view.created_at)) {
+    throw new ToolError(sec.name + "은(는) 이미 커버리지를 중단한 상태입니다 (" + last.created_at + ")");
+  }
+
+  const px = await env.DB.prepare(
+    "SELECT date, close FROM prices WHERE security_id = ?1 ORDER BY date DESC LIMIT 1"
+  ).bind(sec.id).first();
+  const snapshot = px ? { price: px.close, source: "close " + px.date } : null;
+  const proposedAt = new Date().toISOString();
+  const payload = {
+    security_id: sec.id, name: sec.name, ticker: sec.ticker, currency: sec.currency,
+    reasons, memo: args.memo ? String(args.memo).trim() : null,
+    withdrawing: { rating: view.rating, target_price: view.target_price, created_at: view.created_at },
+    snapshot,
+  };
+  const id = await insertDraft(env, { kind: "suspend", clientName: ctx?.clientName, proposedAt, payload, note: args.note });
+
+  return {
+    draft_id: id,
+    status: "pending",
+    security: sec.name + "(" + sec.ticker + ")",
+    withdrawing: payload.withdrawing,
+    reasons,
+    frozen: { proposed_at: proposedAt, price_at_suspension: snapshot?.price ?? null, price_basis: snapshot?.source ?? null },
+    next: "앱 홈의 '가져오기 대기'에서 승인하면 커버리지가 중단됩니다. 시각과 가격은 지금으로 얼려 뒀습니다.",
+    rule: "중단은 매도 의견이 아니라 '지금은 목표가를 낼 수 없다'는 기록이다. 현재 의견은 철회돼 정규 적중률에서 빠지고 " +
+      "철회 건수로 따로 센다. 이미 목표가에 닿은 의견은 철회되지 않는다. 다시 판단이 서면 새 의견을 쓰면 재개된다.",
+  };
+}
+
 // ── 대기 목록 ───────────────────────────────────────
 async function getPending(env) {
   const { results } = await env.DB.prepare(
@@ -228,6 +273,8 @@ async function getPending(env) {
           ? "보유 " + p.rows.length + "줄" + (p.cash?.length ? " + 현금 " + p.cash.length + "건" : "")
           : d.kind === "note"
             ? "종합 의견: " + p.title
+            : d.kind === "suspend"
+            ? p.name + " 커버리지 중단"
             : p.name + " " + p.rating + " 목표가 " + p.target_price,
       };
     }),
@@ -329,9 +376,29 @@ export const WRITE_TOOLS = [
     run: (env, args, ctx) => addNote(env, args, ctx),
   },
   {
+    name: "suspend_coverage",
+    title: "커버리지 중단 제안",
+    description:
+      "한 종목의 커버리지 중단을 제안한다. 중단은 매도 의견이 아니라 '지금은 합리적인 목표가를 낼 수 없어 판단을 유보한다'는 기록이다 " +
+      "(예: 대형 M&A로 사업구조가 바뀜, 가이던스 철회). 현재 의견은 철회되고, 다시 판단이 서면 새 의견을 쓰면 재개된다. " +
+      "사용자가 중단하겠다고 말했을 때만 쓰고, 모델이 대신 판단하지 마라.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ticker: TICKER,
+        reasons: { type: "array", items: { type: "string", enum: SUSPEND_REASONS }, description: "사유 태그 (선택, 여러 개)" },
+        memo: { type: "string", description: "한두 줄 사유" },
+        note: { type: "string", description: "메모 (선택)" },
+      },
+      required: ["ticker"],
+      additionalProperties: false,
+    },
+    run: (env, args, ctx) => suspendCoverage(env, args, ctx),
+  },
+  {
     name: "get_pending_drafts",
     title: "대기 중인 제안",
-    description: "아직 앱에서 승인되지 않은 제안(보유 가져오기·투자의견)을 보여준다.",
+    description: "아직 앱에서 승인되지 않은 제안(보유 가져오기·투자의견·종합 의견·커버리지 중단)을 보여준다.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     run: (env) => getPending(env),
   },

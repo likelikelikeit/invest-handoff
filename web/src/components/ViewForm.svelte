@@ -189,7 +189,8 @@
   const target = $derived(parseNum(f.target));
   const upside = $derived(price > 0 && target > 0 ? (target / price - 1) * 100 : null);
   const previous = $derived(!edit && sid != null ? data.views.find((v) => v.security_id === sid) : null);
-  const formTitle = $derived(edit ? "기록 편집" : previous ? "투자의견 업데이트" : "커버리지 개시");
+  const resuming = $derived(!edit && !previous && sid != null && data.suspended.some((c) => c.security_id === sid));
+  const formTitle = $derived(edit ? "기록 편집" : previous ? "투자의견 업데이트" : resuming ? "커버리지 재개" : "커버리지 개시");
 
   async function save() {
     if (sid == null) return (err = "종목을 고르세요");
@@ -214,7 +215,7 @@
         const r = await api("/views", { method: "POST", body: { security_id: sid, ...body, ...asOf, ...valuation } });
         toast(r.view.backdated
           ? (sec?.name || "") + " " + f.asOf + " 시점으로 기록했습니다 (그날 주가 " + fmt(r.view.price_at) + ")"
-          : (sec?.name || "") + (previous ? " 투자의견을 업데이트했습니다" : " 커버리지를 개시했습니다"));
+          : (sec?.name || "") + (previous ? " 투자의견을 업데이트했습니다" : resuming ? " 커버리지를 재개했습니다" : " 커버리지를 개시했습니다"));
       }
       open = false;
       store.remove(DRAFT_KEY);
@@ -335,7 +336,7 @@
   {#snippet footer()}
     <div class="acts">
       <button class="btn" onclick={() => (open = false)}>취소</button>
-      <button class="btn primary" onclick={save} disabled={busy}>{busy ? "저장 중…" : edit ? "수정" : previous ? "업데이트" : "커버리지 개시"}</button>
+      <button class="btn primary" onclick={save} disabled={busy}>{busy ? "저장 중…" : edit ? "수정" : previous ? "업데이트" : resuming ? "커버리지 재개" : "커버리지 개시"}</button>
     </div>
   {/snippet}
 </Sheet>

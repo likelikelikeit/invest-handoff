@@ -10,15 +10,20 @@
   let { id, fmt } = $props();
 
   let views = $state([]);
+  let stops = $state([]); // 커버리지 중단 기록 (SPEC §5.2.9)
   let rows = $state([]);
   let loaded = $state(false);
   const chartModule = import("./PriceChart.svelte");
 
   async function fetchAll() {
     try {
-      const [v, p] = await Promise.all([api("/views?security_id=" + id), api("/prices/" + id + "?range=10y")]);
+      const [v, p, c] = await Promise.all([
+        api("/views?security_id=" + id), api("/prices/" + id + "?range=10y"),
+        api("/coverage/suspensions?security_id=" + id).catch(() => ({ suspensions: [] })),
+      ]);
       views = v.views;
       rows = p.rows;
+      stops = c.suspensions;
     } catch {
       views = [];
     }
@@ -31,8 +36,16 @@
     return () => window.removeEventListener("views-changed", f);
   });
 
-  const targets = $derived(views.map((v) => ({ date: v.created_at.slice(0, 10), value: v.target_price })));
-  const history = $derived([...views].reverse());
+  // 중단은 목표가 선을 끊는다 (value: null)
+  const targets = $derived([
+    ...views.map((v) => ({ date: v.created_at.slice(0, 10), value: v.target_price })),
+    ...stops.map((c) => ({ date: c.created_at.slice(0, 10), value: null })),
+  ]);
+  // 변천: 의견과 중단을 시간순으로. 중단 뒤 첫 의견은 '재개'
+  const history = $derived(
+    [...views.map((v) => ({ kind: "view", at: v.created_at, v })), ...stops.map((c) => ({ kind: "stop", at: c.created_at, c }))]
+      .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+  );
 </script>
 
 {#if !loaded}
@@ -43,18 +56,26 @@
     <button class="btn primary" onclick={() => (ui.viewForm = { securityId: id })}>커버리지 개시</button>
   </div>
 {:else}
-  <div class="history-head"><strong>투자의견 변천</strong><span class="num">{history.length}회</span></div>
+  <div class="history-head"><strong>투자의견 변천</strong><span class="num">{views.length}회</span></div>
   <ol class="timeline" aria-label="투자의견 변천">
-    {#each history as v, i (v.id)}
-      {@const before = history[i - 1]}
-      <li class:current={i === history.length - 1}>
-        <time class="num">{stamp(v.created_at)}</time>
+    {#each history as e, i (e.kind + (e.kind === "view" ? e.v.id : e.c.id))}
+      {@const prior = history[i - 1]}
+      <li class:current={i === history.length - 1} class:stop={e.kind === "stop"}>
+        <time class="num">{stamp(e.at)}</time>
         <span class="dot" aria-hidden="true"></span>
-        <span class="rating"><RatingChip rating={v.rating} score={v.rating_score} /></span>
-        <strong class="num">{fmt(v.target_price)}</strong>
-        {#if before}
-          <span class="change num {tone((v.target_price - before.target_price) * 1e6)}">{v.target_price > before.target_price ? "▲" : v.target_price < before.target_price ? "▼" : "—"} {fmt(Math.abs(v.target_price - before.target_price))}</span>
-        {:else}<span class="change">최초 제시</span>{/if}
+        {#if e.kind === "stop"}
+          <span class="rating"><span class="stopchip">커버리지 중단</span></span>
+          <strong class="num">—</strong>
+          <span class="change">{e.c.reasons.join(" · ")}</span>
+        {:else}
+          {@const v = e.v}
+          {@const before = prior?.kind === "view" ? prior.v : null}
+          <span class="rating"><RatingChip rating={v.rating} score={v.rating_score} /></span>
+          <strong class="num">{fmt(v.target_price)}</strong>
+          {#if before}
+            <span class="change num {tone((v.target_price - before.target_price) * 1e6)}">{v.target_price > before.target_price ? "▲" : v.target_price < before.target_price ? "▼" : "—"} {fmt(Math.abs(v.target_price - before.target_price))}</span>
+          {:else}<span class="change">{prior ? "재개" : "최초 제시"}</span>{/if}
+        {/if}
       </li>
     {/each}
   </ol>
@@ -79,6 +100,8 @@
   .timeline time{grid-area:time;font-size:11px;color:var(--sub2);margin-bottom:3px}
   .timeline .dot{grid-area:dot;z-index:1;width:9px;height:9px;margin:6px 0 0 3px;border-radius:50%;background:var(--sub2);box-shadow:0 0 0 3px var(--bg)}
   .timeline .current .dot{background:var(--accent)}
+  .timeline .stop .dot{background:var(--bg);border:1.5px solid var(--sub2);width:8px;height:8px}
+  .stopchip{display:inline-block;font-size:11.5px;font-weight:640;padding:1px 7px;border-radius:6px;background:var(--bg2);color:var(--sub)}
   .timeline .rating{grid-area:rating;justify-self:start}
   .timeline strong{grid-area:target;font-size:15px;margin-top:4px}
   .timeline .change{grid-area:change;font-size:11.5px;color:var(--sub2)}

@@ -18,9 +18,10 @@ const INSTRUCTIONS =
   "- 수치는 이미 계산돼 있다. 비중·수익률·PER 같은 값을 직접 다시 계산하지 말고 준 값을 쓴다.\n" +
   "- 시세는 저장된 일별 종가(지연)다. 답할 때 기준일을 같이 말한다.\n" +
   "- 투자의견(get_investment_views)은 덮어쓰지 않는 기록이다. 같은 종목의 여러 행은 생각의 변화다.\n" +
+  "- 커버리지 중단은 매도 의견이 아니라 판단 유보다. 철회된 의견(withdrawn)을 틀린 의견으로 말하지 않는다.\n" +
   "- 기술적 판정(get_tech_calls)은 투자의견·성과평가와 섞지 않는다. 여기서 예측형 조언을 만들지 않는다.\n" +
   "- 금액은 원화 기준이고 축약하지 않는다.\n" +
-  "- 쓰기 툴(submit_portfolio_import, add_investment_view)은 제안까지만 한다. 실제 반영은 사용자가 앱에서 승인해야 하므로, " +
+  "- 쓰기 툴(submit_portfolio_import, add_investment_view, add_note, suspend_coverage)은 제안까지만 한다. 실제 반영은 사용자가 앱에서 승인해야 하므로, " +
   "'저장했다'가 아니라 '앱에서 확인하면 반영된다'고 말한다.";
 
 const rpcError = (id, code, message) => ({ jsonrpc: "2.0", id, error: { code, message } });

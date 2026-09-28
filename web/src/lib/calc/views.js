@@ -12,9 +12,10 @@ export function horizonEnd(createdAt, months) {
   return d.toISOString().slice(0, 10);
 }
 
-/** 'in_progress' | 'awaiting'(기간 끝, 크론 평가 전) | 'evaluated' */
+/** 'in_progress' | 'awaiting'(기간 끝, 크론 평가 전) | 'evaluated' | 'withdrawn'(커버리지 중단으로 철회) */
 export function status(v, today) {
   if (v.evaluated_at) return "evaluated";
+  if (v.withdrawn_at) return "withdrawn";
   return horizonEnd(v.created_at, v.horizon_months) <= today ? "awaiting" : "in_progress";
 }
 
@@ -54,17 +55,23 @@ const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : nu
  * 그래서 두 표본 수가 다를 수 있다 — 화면에 둘 다 적는다(n, matured).
  *
  * 소급 기록(backdated, §5.2.6)도 같이 센다 [사용자 결정 2026-09-22].
+ *
+ * 커버리지 중단으로 철회된 의견(§5.2.9)은 정규 표본에서 빼고 withdrawn으로 옆에 센다.
+ * 불리할 때 중단해 적중률을 지키는 일이 숨지 않게, 철회를 미적중으로 친 적중률(hitRateAll)도 낸다.
  */
 export function performance(views, today) {
   const matured = views.filter((v) => v.evaluated_at);
   const early = views.filter((v) => !v.evaluated_at && v.hit === 1);
   const judged = matured.concat(early);
   const hits = judged.filter((v) => v.hit === 1).length;
-  const open = views.filter((v) => !v.evaluated_at && v.hit !== 1);
+  const withdrawn = views.filter((v) => !v.evaluated_at && v.hit !== 1 && v.withdrawn_at);
+  const open = views.filter((v) => !v.evaluated_at && v.hit !== 1 && !v.withdrawn_at);
   return {
     n: judged.length,
     early: early.length,
     hitRate: judged.length ? hits / judged.length : null,
+    withdrawn: withdrawn.length,
+    hitRateAll: judged.length + withdrawn.length ? hits / (judged.length + withdrawn.length) : null,
     matured: matured.length,
     avgTarget: mean(matured.map((v) => v.target_return).filter((x) => x != null)),
     avgActual: mean(matured.map((v) => v.actual_return).filter((x) => x != null)),

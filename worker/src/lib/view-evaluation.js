@@ -21,12 +21,13 @@ export function horizonEnd(createdAt, months) {
  *      적중 기준이 "기간 안에 한 번이라도 도달"이라 닿은 순간 결과가 확정되기 때문이다.
  *   2) 만기 평가 — 기간이 끝나면 만기 종가로 실제수익률·MAE까지 채우고 evaluated_at을 찍는다.
  * 그래서 hit=1이면서 evaluated_at이 비어 있는 행이 생긴다(조기 적중, 수익률은 아직).
+ * 커버리지 중단으로 철회된 의견(withdrawn_at)은 보지 않는다 (§5.2.9).
  */
 export async function evaluateViews(env, now = new Date()) {
   const today = todayKst(now);
   const { results: pending } = await env.DB.prepare(
     "SELECT id, security_id, created_at, horizon_months, target_price, price_at, hit FROM views " +
-    "WHERE evaluated_at IS NULL ORDER BY created_at, id LIMIT 100"
+    "WHERE evaluated_at IS NULL AND withdrawn_at IS NULL ORDER BY created_at, id LIMIT 100"
   ).all();
   const all = pending.map((v) => ({
     id: v.id, security_id: v.security_id, start: v.created_at.slice(0, 10),

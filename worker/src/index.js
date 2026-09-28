@@ -20,6 +20,7 @@ import { getRules, listRules, saveRules, getTech, createCall, patchCall, listCal
 import { listEvents, createEvent, deleteEvent, getMacro, saveDots, refreshMacro } from "./routes/calendar.js";
 import { runMisc, CRON_MISC } from "./cron/misc.js";
 import { listDrafts, applyDraft, discardDraft } from "./routes/drafts.js";
+import { listSuspensions, createSuspension, deleteSuspension } from "./routes/coverage.js";
 import { listNotes, listNoteTags, createNote, patchNote, deleteNote } from "./routes/notes.js";
 
 const ID = "(?<id>\\d+)";
@@ -55,6 +56,10 @@ const ROUTES = [
   ["POST", "/views", createView],
   ["PATCH", "/views/" + ID, patchView],
   ["DELETE", "/views/" + ID, deleteView],
+
+  ["GET", "/coverage/suspensions", listSuspensions],
+  ["POST", "/coverage/suspensions", createSuspension],
+  ["DELETE", "/coverage/suspensions/" + ID, deleteSuspension],
 
   ["GET", "/fundamentals/" + ID, getFundamentals],
   ["POST", "/fundamentals/" + ID + "/refresh", refreshFundamentalsRoute],

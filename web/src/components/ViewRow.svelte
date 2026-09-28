@@ -19,6 +19,8 @@
   const today = todayKst();
   const st = $derived(status(v, today));
   const basis = $derived(basisParts(v.valuation, fmt));
+  // 철회 시점까지의 수익률 (중단 때 얼린 가격 기준)
+  const wdRet = $derived(v.withdrawn_price > 0 && v.price_at > 0 ? v.withdrawn_price / v.price_at - 1 : null);
 
   async function del() {
     if (!confirm((v.name || "") + " " + stamp(v.created_at) + " 의견을 지울까요? 되돌릴 수 없습니다.")) return;
@@ -41,7 +43,7 @@
         {#if showName}<span class="nm">{v.name}</span>{/if}
         <RatingChip rating={v.rating} score={v.rating_score} />
       </span>
-      <span class="when num">{dayStamp(v.created_at)}{#if v.hit === 1}<em class="hit">목표 도달</em>{/if}{#if v.edited_at}<em>수정됨</em>{/if}</span>
+      <span class="when num">{dayStamp(v.created_at)}{#if v.hit === 1}<em class="hit">목표 도달</em>{:else if v.withdrawn_at}<em class="wd">철회</em>{/if}{#if v.edited_at}<em>수정됨</em>{/if}</span>
     </span>
     <span class="tp num">{fmt(v.target_price)}</span>
     <span class="nums num">
@@ -66,7 +68,7 @@
         {/if}
         <div><dt>목표 기간</dt><dd>{v.horizon_months}개월 · {slashDate(horizonEnd(v.created_at, v.horizon_months))}</dd></div>
         <div><dt>목표 기간 진행률</dt>
-          <dd>{st === "in_progress" ? Math.round(elapsed(v, today) * 100) + "%" : st === "awaiting" ? "기간 종료 · 평가 대기" : "평가됨"}{#if v.hit_date} · <span class="hitd">{slashDate(v.hit_date)} 목표 도달</span>{/if}</dd>
+          <dd>{#if st === "withdrawn"}철회 · {slashDate(v.withdrawn_at)}{#if wdRet != null} · <span class={tone(wdRet * 1e6)}>{pctSigned(wdRet * 100)}</span>{/if}{:else}{st === "in_progress" ? Math.round(elapsed(v, today) * 100) + "%" : st === "awaiting" ? "기간 종료 · 평가 대기" : "평가됨"}{/if}{#if v.hit_date} · <span class="hitd">{slashDate(v.hit_date)} 목표 도달</span>{/if}</dd>
         </div>
         {#if v.consensus_target_at}<div><dt>그때 컨센 목표가</dt><dd>{fmt(v.consensus_target_at)}</dd></div>{/if}
       </dl>
@@ -108,6 +110,8 @@
   .when{font-size:12.5px;color:var(--sub2)}
   .when em{font-style:normal;margin-left:6px;color:var(--orange)}
   .when em.hit{color:var(--up);font-weight:600}
+  .when em.wd{color:var(--sub2);font-weight:600}
+  .meta .up{color:var(--up)}.meta .down{color:var(--down)}
   .tp{font-size:18px;font-weight:700;letter-spacing:-.02em;color:var(--ink);text-align:right}
   .nums{display:grid;grid-template-columns:auto auto;gap:1px 8px;align-items:baseline;text-align:right}
   .nums i{font-style:normal;font-size:11.5px;color:var(--sub2)}

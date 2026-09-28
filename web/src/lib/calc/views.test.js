@@ -38,6 +38,21 @@ describe("가격 관련", () => {
 });
 
 describe("performance", () => {
+  it("철회된 의견은 정규 표본에서 빠지고, 미적중으로 친 적중률을 옆에 낸다", () => {
+    const views = [
+      v({ evaluated_at: "x", hit: 1, abs_error: 0.1 }),
+      v({ evaluated_at: "x", hit: 0, abs_error: 0.3 }),
+      v({ withdrawn_at: "2026-06-18T09:00:00+09:00" }),
+      v({ withdrawn_at: "2026-06-18T09:00:00+09:00", hit: 1 }),  // 닿은 뒤라 철회가 아니다(서버도 이렇게 두지 않는다)
+      v({ created_at: "2026-09-01T00:00:00+09:00" }),
+    ];
+    const p = performance(views, "2026-09-28");
+    expect(p).toMatchObject({ n: 3, withdrawn: 1, inProgress: 1 });
+    expect(p.hitRate).toBeCloseTo(2 / 3);
+    expect(p.hitRateAll).toBeCloseTo(2 / 4);
+    expect(status(views[2], "2026-09-28")).toBe("withdrawn");
+  });
+
   it("평가된 것만 지표, 진행 중·대기는 따로", () => {
     const views = [
       v({ evaluated_at: "x", hit: 1, target_return: 0.3, actual_return: 0.1, abs_error: 0.2 }),

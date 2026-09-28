@@ -22,6 +22,7 @@
   import ChangeSheet from "./components/ChangeSheet.svelte";
   import ViewForm from "./components/ViewForm.svelte";
   import NoteForm from "./components/NoteForm.svelte";
+  import SuspendSheet from "./components/SuspendSheet.svelte";
   import TechSheet from "./components/TechSheet.svelte";
 
   const current = $derived(activeTab(route.parts));
@@ -84,6 +85,7 @@
   <ChangeSheet />
   <ViewForm />
   <NoteForm />
+  <SuspendSheet />
   <TechSheet />
 
   {#if ui.toast}<div class="toast" role="status">{ui.toast}</div>{/if}

@@ -46,7 +46,13 @@
     if (!chart) return;
     area.setData(shown.map((r) => ({ time: r[0], value: r[4] })));
     vol.setData(shown.filter((r) => r[5] != null).map((r) => ({ time: r[0], value: r[5] })));
-    if (tgt) tgt.setData(targetLine(targets, shown));
+    if (tgt) {
+      const pts = targetLine(targets, shown);
+      tgt.setData(pts);
+      // 커버리지 중단 중이면(마지막이 공백) 현재 목표가 가로선·값 표시를 끈다
+      const live = pts.length && pts[pts.length - 1].value != null;
+      tgt.applyOptions({ priceLineVisible: live, lastValueVisible: live });
+    }
     chart.timeScale().fitContent();
     paint();
   }

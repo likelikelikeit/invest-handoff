@@ -15,7 +15,8 @@ export const data = $state({
   error: "",
   quoteErrors: [],
   market: [], // 시장 띠: 지수·환율 securities
-  views: [], // 종목별 현재 투자의견 (/views/latest)
+  views: [], // 종목별 현재 투자의견 (/views/latest). 커버리지를 중단한 종목은 빠진다
+  suspended: [], // 지금 커버리지 중단 상태인 종목 (SPEC §5.2.9)
   drafts: [], // MCP가 넣은 대기 중 제안 (SPEC §7.9)
   loaded: false,
   offline: false,
@@ -30,11 +31,14 @@ export function nativePrice(ysym) {
 
 export async function loadViews() {
   try {
-    data.views = (await api("/views/latest")).views;
+    const r = await api("/views/latest");
+    data.views = r.views;
+    data.suspended = r.suspended || [];
     const missing = data.views.map((v) => v.ysym).filter((s) => !data.quotes[s]);
     if (missing.length) await refreshQuotes(missing);
   } catch {
     data.views = [];
+    data.suspended = [];
   }
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("views-changed"));
 }

@@ -7,6 +7,7 @@ import { nowIso, todayKst } from "../lib/time.js";
 import { quote } from "../sources/yahoo.js";
 import { RATINGS, scoreOf } from "../lib/ratings.js";
 import { perAt } from "../lib/valuation.js";
+import { currentSuspensions } from "./coverage.js";
 
 const EDITABLE = ["rating", "target_price", "horizon_months", "thesis", "risks", "conclusion", "valuation"];
 
@@ -42,7 +43,8 @@ function fields(body, partial) {
 }
 
 const SELECT =
-  "SELECT v.*, s.name, s.ticker, s.ysym, s.market, s.currency, s.isin, s.brand_color, s.sector " +
+  "SELECT v.*, s.name, s.ticker, s.ysym, s.market, s.currency, s.isin, s.brand_color, s.sector, " +
+  "(SELECT c.price_at FROM coverage_suspensions c WHERE c.view_id = v.id) AS withdrawn_price " +
   "FROM views v JOIN securities s ON s.id = v.security_id ";
 
 function out(row) {
@@ -54,7 +56,7 @@ function out(row) {
  * 기록 시점 가격: 앱이 아는 최신가 (SPEC §5.2.3). 야후 지연 시세 → 실패하면 저장된 마지막 종가.
  * 둘 다 없으면 기록할 수 없다(상승여력을 못 얼린다).
  */
-async function priceNow(env, sec) {
+export async function priceNow(env, sec) {
   try {
     const q = await quote(sec.ysym);
     return { price: q.price, source: "yahoo(delayed)" + (q.time ? " " + q.time : "") };
@@ -90,13 +92,15 @@ export async function listViews(request, env, headers, _p, url) {
   return json({ ok: true, views: results.map(out) }, 200, headers);
 }
 
-// GET /views/latest — 종목별 현재 의견(최신 행)
+// GET /views/latest — 종목별 현재 의견(최신 행). 커버리지를 중단한 종목은 빼고 suspended로 따로 준다 (§5.2.9).
 export async function latestViews(request, env, headers) {
   const { results } = await env.DB.prepare(
     SELECT + "WHERE v.id = (SELECT v2.id FROM views v2 WHERE v2.security_id = v.security_id ORDER BY v2.created_at DESC, v2.id DESC LIMIT 1) " +
     "AND s.archived_at IS NULL ORDER BY v.created_at DESC"
   ).all();
-  return json({ ok: true, views: results.map(out) }, 200, headers);
+  const suspended = await currentSuspensions(env);
+  const off = new Set(suspended.map((c) => c.security_id));
+  return json({ ok: true, views: results.filter((v) => !off.has(v.security_id)).map(out), suspended }, 200, headers);
 }
 
 /**
@@ -216,5 +220,6 @@ export async function patchView(request, env, headers, p) {
 export async function deleteView(request, env, headers, p) {
   const r = await env.DB.prepare("DELETE FROM views WHERE id = ?1").bind(p.id).run();
   if (!r.meta.changes) throw new HttpError(404, "의견 " + p.id + "이(가) 없습니다");
+  await env.DB.prepare("UPDATE coverage_suspensions SET view_id = NULL WHERE view_id = ?1").bind(p.id).run();
   return json({ ok: true }, 200, headers);
 }

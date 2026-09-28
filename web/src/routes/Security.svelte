@@ -13,12 +13,12 @@
   import RatingChip from "../components/RatingChip.svelte";
   import SelectField from "../components/SelectField.svelte";
   import { upsideNow } from "../lib/calc/views.js";
-  import { data, load, refreshQuotes } from "../lib/data.svelte.js";
+  import { data, load, loadViews, refreshQuotes } from "../lib/data.svelte.js";
   import { api } from "../lib/api.js";
   import { ui, askChanges, toast } from "../lib/ui.svelte.js";
   import { holdingFromPosition } from "../lib/calc/portfolio.js";
   import { assignColors, SECTOR_NAMES } from "../lib/calc/colors.js";
-  import { won, wonSigned, pctSigned, qtyDisplay, qtyStr, tone, parseNum, stamp, valueFmt } from "../lib/format.js";
+  import { won, wonSigned, pctSigned, qtyDisplay, qtyStr, tone, parseNum, stamp, valueFmt, slashDate } from "../lib/format.js";
 
   let { id } = $props();
 
@@ -46,6 +46,17 @@
   // 현재 의견 = 최신 행 (SPEC §4.3 헤더: 내 목표가 · 상승여력 · 현재 등급)
   const view = $derived(data.views.find((v) => v.security_id === id));
   const up = $derived(view && q ? upsideNow(view, q.price) : null);
+  const suspended = $derived(data.suspended.find((c) => c.security_id === id));
+
+  async function undoSuspend() {
+    if (!confirm("커버리지 중단을 취소할까요? 철회한 의견이 다시 평가됩니다.")) return;
+    try {
+      await api("/coverage/suspensions/" + suspended.id, { method: "DELETE" });
+      await loadViews();
+    } catch (e) {
+      toast("실패: " + e.message);
+    }
+  }
 
   async function fetchSec() {
     err = "";
@@ -137,10 +148,17 @@
           <span class="mv num">내 목표 {valueFmt(sec)(view.target_price)}</span>
           {#if up != null}<span class="mv num {tone(up * 1e6)}">상승여력 {pctSigned(up * 100)}</span>{/if}
           <RatingChip rating={view.rating} score={view.rating_score} />
+        {:else if suspended}
+          <span class="mv flat num">커버리지 중단 · {slashDate(suspended.created_at)}</span>
         {:else}
           <span class="mv flat">커버리지 없음</span>
         {/if}
-        <button class="btn sm primary" onclick={() => (ui.viewForm = { securityId: id })}>{view ? "투자의견 업데이트" : "커버리지 개시"}</button>
+        <button class="btn sm primary" onclick={() => (ui.viewForm = { securityId: id })}>{view ? "투자의견 업데이트" : suspended ? "커버리지 재개" : "커버리지 개시"}</button>
+        {#if view}
+          <button class="btn sm" onclick={() => (ui.suspend = { view })}>커버리지 중단</button>
+        {:else if suspended}
+          <button class="btn sm link" onclick={undoSuspend}>중단 취소</button>
+        {/if}
       </div>
       <!-- 판정 계기판 (SPEC §5.6): 매수는 모든 종목, 매도는 보유 종목만 (사용자 결정) -->
       <div class="tech-btns">

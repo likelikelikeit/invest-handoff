@@ -24,7 +24,9 @@
     busy = d.id;
     try {
       const r = await api("/drafts/" + d.id + "/apply", { method: "POST", body: {} });
-      if (r.note) {
+      if (r.suspension) {
+        toast(r.suspension.name + " 커버리지를 중단했습니다 (" + when(r.suspension.created_at) + " 시점)");
+      } else if (r.note) {
         toast("종합 의견을 기록했습니다 (" + when(r.note.created_at) + " 시점)");
         window.dispatchEvent(new CustomEvent("notes-changed"));
       } else {
@@ -78,6 +80,19 @@
         <div class="acts">
           <button class="btn sm" onclick={() => discard(d)} disabled={busy === d.id}>버리기</button>
           <button class="btn sm primary" onclick={() => applyView(d)} disabled={busy === d.id}>그대로 기록</button>
+        </div>
+      {:else if d.kind === "suspend"}
+        <p class="title">{d.payload.name} · 커버리지 중단</p>
+        {#if d.payload.withdrawing}
+          <p class="sub">{d.payload.withdrawing.rating} {money(d.payload.withdrawing.target_price, d.payload.currency)} 철회</p>
+        {/if}
+        {#if d.payload.reasons?.length || d.payload.memo}
+          <p class="note">{[(d.payload.reasons || []).join(" · "), d.payload.memo].filter(Boolean).join("\n")}</p>
+        {/if}
+        <p class="basis">중단 시점 {when(d.proposed_at)}</p>
+        <div class="acts">
+          <button class="btn sm" onclick={() => discard(d)} disabled={busy === d.id}>버리기</button>
+          <button class="btn sm primary" onclick={() => applyView(d)} disabled={busy === d.id}>중단</button>
         </div>
       {:else}
         <p class="title">{d.payload.name} · {d.payload.rating}</p>

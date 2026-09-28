@@ -74,6 +74,8 @@ export function volumeStats(rows) {
  * 각 의견 날짜부터 다음 의견까지 수평, 마지막 의견은 차트 끝까지 이어진다.
  * 보이는 기간 이전의 의견은 기간 시작점에서 이어받고, 마지막 봉보다 뒤(오늘 기록)면 마지막 봉에 붙인다.
  * 같은 날짜에 둘이면 나중 것.
+ * value가 null이면 커버리지 중단(§5.2.9): 그날까지 이전 목표가를 긋고 다음 봉에서 선을 끊는다
+ * (값 없는 점 = 차트 라이브러리의 공백). 재개하면 그날부터 새 선이 시작된다.
  */
 export function targetLine(targets, rows) {
   if (!targets || !targets.length || !rows.length) return [];
@@ -81,13 +83,29 @@ export function targetLine(targets, rows) {
   const to = rows[rows.length - 1][0];
   const sorted = [...targets].sort((a, b) => (a.date < b.date ? -1 : 1));
   const byDate = new Map();
-  let carry = null;
+  let carry;
   for (const t of sorted) {
     if (t.date < from) carry = t.value;
     else byDate.set(t.date > to ? to : t.date, t.value);
   }
   if (carry != null && !byDate.has(from)) byDate.set(from, carry);
-  const pts = [...byDate.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([time, value]) => ({ time, value }));
-  if (pts.length && pts[pts.length - 1].time < to) pts.push({ time: to, value: pts[pts.length - 1].value });
+
+  const pts = [];
+  let prev = null;
+  for (const [time, value] of [...byDate.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    const last = pts[pts.length - 1];
+    if (value == null) {
+      if (prev == null) continue;
+      if (!last || last.time !== time) pts.push({ time, value: prev });
+      const next = rows.find((r) => r[0] > time);
+      if (next) pts.push({ time: next[0] });
+      prev = null;
+    } else {
+      if (last && last.time === time && last.value === undefined) pts.pop(); // 끊은 바로 다음 봉에 재개
+      pts.push({ time, value });
+      prev = value;
+    }
+  }
+  if (prev != null && pts[pts.length - 1].time < to) pts.push({ time: to, value: prev });
   return pts;
 }

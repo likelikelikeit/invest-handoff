@@ -7,6 +7,7 @@ import { insertView, viewFields } from "./views.js";
 import { insertNote, noteFields } from "./notes.js";
 import { mergeRows } from "./portfolio.js";
 import { putCashRows } from "./securities.js";
+import { suspendCoverage, suspendFields } from "./coverage.js";
 
 const out = (d) => ({ ...d, payload: JSON.parse(d.payload), result: d.result ? JSON.parse(d.result) : null });
 
@@ -76,6 +77,16 @@ export async function applyDraft(request, env, headers, p) {
     });
     await resolve(env, p.id, "applied", { note_id: note.id });
     return json({ ok: true, note }, 200, headers);
+  }
+
+  if (d.kind === "suspend") {
+    // 커버리지 중단 초안 (§5.2.9): 제출 시각과 그때 종가로 중단한다.
+    const s = d.payload;
+    const suspension = await suspendCoverage(env, {
+      securityId: s.security_id, createdAt: nowIso(new Date(d.proposed_at)), ...suspendFields(s), snapshot: s.snapshot,
+    });
+    await resolve(env, p.id, "applied", { suspension_id: suspension.id });
+    return json({ ok: true, suspension }, 200, headers);
   }
 
   throw new HttpError(400, "모르는 초안 종류입니다: " + d.kind);

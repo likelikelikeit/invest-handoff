@@ -60,6 +60,27 @@ describe("get_investment_views", () => {
     expect(done.evaluation.target_return_pct).toBe(50);
   });
 
+  it("커버리지 중단: 현재 의견에서 빠지고, 철회된 의견은 정규 적중률 밖에서 따로 센다", async () => {
+    const nv = env.DB.raw.prepare("SELECT id FROM securities WHERE ticker='NVDA'").get().id;
+    const cur = env.DB.raw.prepare("SELECT id FROM views WHERE security_id = ? ORDER BY created_at DESC LIMIT 1").get(nv).id;
+    env.DB.raw.prepare("UPDATE views SET withdrawn_at = '2026-09-20T09:00:00+09:00' WHERE id = ?").run(cur);
+    env.DB.raw.prepare(
+      "INSERT INTO coverage_suspensions (security_id, created_at, reasons, memo, view_id, price_at) VALUES (?, '2026-09-20T09:00:00+09:00', ?, 'M&A', ?, 108)"
+    ).run(nv, JSON.stringify(["사업구조 변화"]), cur);
+
+    const latest = await run("get_investment_views");
+    expect(latest.views.map((v) => v.ticker)).toEqual(["005930"]);
+    expect(latest.suspended_coverage).toEqual([expect.objectContaining({ ticker: "NVDA", reasons: ["사업구조 변화"], memo: "M&A", price_at_suspension: 108 })]);
+
+    const hist = await run("get_investment_views", { ticker: "NVDA" });
+    expect(hist.evaluated_summary).toMatchObject({ n: 1, hit_rate_pct: 100, withdrawn: 1, hit_rate_if_withdrawn_missed_pct: 50 });
+    expect(hist.views[0].withdrawn).toMatchObject({ price_at_withdrawal: 108, return_to_withdrawal_pct: -10 });
+
+    const c = await run("get_company_view", { ticker: "NVDA" });
+    expect(c.coverage).toMatchObject({ status: "suspended", memo: "M&A" });
+    expect((await run("get_company_view", { ticker: "005930" })).coverage.status).toBe("active");
+  });
+
   it("없는 종목이면 등록된 종목을 알려준다", async () => {
     await expect(run("get_investment_views", { ticker: "없는회사" })).rejects.toThrow(/엔비디아/);
   });
