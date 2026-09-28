@@ -4,7 +4,7 @@
   import RatingChip from "./RatingChip.svelte";
   import { api } from "../lib/api.js";
   import { ui, toast } from "../lib/ui.svelte.js";
-  import { loadViews, nativePrice } from "../lib/data.svelte.js";
+  import { data, loadViews, nativePrice } from "../lib/data.svelte.js";
   import { returnSince, status, elapsed, horizonEnd } from "../lib/calc/views.js";
   import { basisParts } from "../lib/calc/valuation.js";
   import { valueFmt, pctSigned, tone, stamp, dayStamp, slashDate, textBlocks } from "../lib/format.js";
@@ -19,6 +19,8 @@
   const today = todayKst();
   const st = $derived(status(v, today));
   const basis = $derived(basisParts(v.valuation, fmt));
+  // 그 종목의 현재 의견(최신 행, 중단 상태 아님)에만 커버리지 중단 버튼을 둔다 (§5.2.9)
+  const current = $derived(data.views.some((x) => x.id === v.id));
   // 철회 시점까지의 수익률 (중단 때 얼린 가격 기준)
   const wdRet = $derived(v.withdrawn_price > 0 && v.price_at > 0 ? v.withdrawn_price / v.price_at - 1 : null);
 
@@ -85,6 +87,7 @@
       <div class="acts">
         <button class="btn sm" onclick={() => (ui.viewForm = { securityId: v.security_id })}>업데이트</button>
         <button class="btn sm" onclick={() => (ui.viewForm = { edit: v })}>편집</button>
+        {#if current}<button class="btn sm" onclick={() => (ui.suspend = { view: v })}>커버리지 중단</button>{/if}
         <button class="btn sm danger" onclick={del}>삭제</button>
       </div>
     </div>
@@ -129,7 +132,7 @@
   .para{font-size:14px;line-height:1.65;margin:0 0 10px;white-space:pre-wrap;word-break:keep-all}
   .para:last-child{margin-bottom:0}
   .edited{font-size:12px;color:var(--orange);margin-top:8px}
-  .acts{display:flex;gap:8px;margin-top:14px}
+  .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
   .danger{color:var(--red)}
   /* 폰 폭: 세 칸을 유지하되 라벨을 줄이고 간격·글자를 한 단계 낮춘다 */
   @media (max-width:480px){
