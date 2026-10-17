@@ -1,6 +1,8 @@
 // MCP 읽기 툴. 전부 D1 조회만 한다(쓰기 없음). 계산은 여기서(코드가) 하고, 모델에게는 결과만 준다.
 // 금액은 원화 환산값과 표시통화 원값을 같이 준다. 축약하지 않는다.
 
+import { RATINGS } from "../../worker/src/lib/ratings.js";
+
 const round = (v, d = 2) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10 ** d) / 10 ** d);
 const pct = (v) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 1000) / 10); // 0.1234 → 12.3(%)
 
@@ -107,7 +109,7 @@ async function getPortfolio(env) {
 
 // ── 2. 투자의견 ──────────────────────────────────────
 const VIEW_COLS =
-  "v.id, v.security_id, v.created_at, v.edited_at, v.rating, v.target_price, v.target_ccy, v.horizon_months, v.thesis, v.risks, " +
+  "v.id, v.security_id, v.created_at, v.edited_at, v.rating, v.rating_score, v.target_price, v.target_ccy, v.horizon_months, v.thesis, v.risks, " +
   "v.price_at, v.upside_pct, v.consensus_target_at, v.per_at, v.conclusion, " +
   "v.evaluated_at, v.hit, v.hit_date, v.price_at_horizon, v.actual_return, v.target_return, v.abs_error, v.backdated, v.valuation, " +
   "v.withdrawn_at, (SELECT c.price_at FROM coverage_suspensions c WHERE c.view_id = v.id) AS withdrawn_price, " +
@@ -145,11 +147,17 @@ function valuationOut(raw) {
   };
 }
 
+// 등급 서열 (SPEC §5.2.2). 라벨만 보고 짐작하지 않게 표를 같이 준다.
+const RATING_SCALE = {
+  order: RATINGS.map((r) => r.label + " " + (r.score > 0 ? "+" : "") + r.score).join(" > "),
+  note: "rating_score가 클수록 긍정적이다. 같은 종목에서 점수가 오르면 등급 상향, 내리면 하향. 커버리지 평가이며 실제 매매 의사가 아니다.",
+};
+
 function viewOut(v) {
   return {
     name: v.name, ticker: v.ticker, currency: v.currency,
     created_at: v.created_at, edited_at: v.edited_at,
-    rating: v.rating, target_price: v.target_price, horizon_months: v.horizon_months,
+    rating: v.rating, rating_score: v.rating_score, target_price: v.target_price, horizon_months: v.horizon_months,
     price_at_record: v.price_at, upside_at_record_pct: pct(v.upside_pct),
     // 과거 날짜로 소급 기록한 것인지. 성과 집계에는 같이 들어간다 (SPEC §5.2.5·§5.2.6).
     backdated: v.backdated === 1,
@@ -213,6 +221,7 @@ async function getViews(env, args) {
     rule: "의견은 덮어쓰지 않는 기록이다. 같은 종목의 여러 행은 시간에 따른 생각의 변화다. " +
       "backdated=true는 과거 날짜로 소급 입력한 것이고, 성과 집계에는 같이 들어간다. " +
       "withdrawn이 있으면 커버리지 중단으로 철회된 의견이다(매도 의견이 아니다).",
+    rating_scale: RATING_SCALE,
     count: results.length,
     evaluated_summary: judged.length || withdrawn.length
       ? {
@@ -321,6 +330,7 @@ async function getCompany(env, args) {
     },
     financials: fin.results,
     estimates: est.results,
+    rating_scale: RATING_SCALE,
     coverage: susp.results[0]
       ? { status: "suspended", ...suspensionOut(susp.results[0]) }
       : { status: views.results.length ? "active" : "none" },

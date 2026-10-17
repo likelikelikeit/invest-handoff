@@ -70,7 +70,7 @@
         {:else}
           {@const v = e.v}
           {@const before = prior?.kind === "view" ? prior.v : null}
-          <span class="rating"><RatingChip rating={v.rating} score={v.rating_score} /></span>
+          <span class="rating"><RatingChip rating={v.rating} score={v.rating_score} />{#if before && v.rating_score !== before.rating_score}<span class="rchg {v.rating_score > before.rating_score ? 'up' : 'down'}">{v.rating_score > before.rating_score ? "▲ 상향" : "▼ 하향"}</span>{/if}</span>
           <strong class="num">{fmt(v.target_price)}</strong>
           {#if before}
             <span class="change num {tone((v.target_price - before.target_price) * 1e6)}">{v.target_price > before.target_price ? "▲" : v.target_price < before.target_price ? "▼" : "—"} {fmt(Math.abs(v.target_price - before.target_price))}</span>
@@ -102,7 +102,8 @@
   .timeline .current .dot{background:var(--accent)}
   .timeline .stop .dot{background:var(--bg);border:1.5px solid var(--sub2);width:8px;height:8px}
   .stopchip{display:inline-block;font-size:11.5px;font-weight:640;padding:1px 7px;border-radius:6px;background:var(--bg2);color:var(--sub)}
-  .timeline .rating{grid-area:rating;justify-self:start}
+  .timeline .rating{grid-area:rating;justify-self:start;display:flex;align-items:center;gap:5px;white-space:nowrap}
+  .rchg{font-size:11px;font-weight:600}.rchg.up{color:var(--up)}.rchg.down{color:var(--down)}
   .timeline strong{grid-area:target;font-size:15px;margin-top:4px}
   .timeline .change{grid-area:change;font-size:11.5px;color:var(--sub2)}
   .timeline .change.up{color:var(--up)}.timeline .change.down{color:var(--down)}

@@ -47,6 +47,8 @@ describe("get_investment_views", () => {
     expect(r.views.find((v) => v.ticker === "NVDA").rating).toBe("적극 매수");
     expect(r.views[0].upside_at_record_pct).toBeDefined();
     expect(r.rule).toContain("덮어쓰지 않는");
+    expect(r.views.find((v) => v.ticker === "NVDA").rating_score).toBe(3);
+    expect(r.rating_scale.order).toBe("적극 매수 +4 > 매수 +3 > 비중 확대 +2 > 보유 +1 > 중립 0 > 비중 축소 -1 > 매도 -2 > 적극 매도 -3");
   });
 
   it("종목을 주면 이력 전부와 평가 요약을 준다", async () => {
