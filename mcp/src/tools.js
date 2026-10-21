@@ -346,7 +346,7 @@ async function getCalendar(env, args) {
   const to = isDate(args.to) ? args.to : addDays(from, 30);
   if (to < from) throw new ToolError("to가 from보다 빠릅니다");
   const { results } = await env.DB.prepare(
-    "SELECT e.date, e.time, e.kind, e.title, e.detail, e.source, s.name AS security_name, s.ticker " +
+    "SELECT e.date, e.time, e.kind, e.title, e.detail, e.source, e.confirmed, s.name AS security_name, s.ticker " +
     "FROM events e LEFT JOIN securities s ON s.id = e.security_id " +
     "WHERE e.date BETWEEN ?1 AND ?2 AND (e.security_id IS NULL OR s.archived_at IS NULL) " +
     "ORDER BY e.date, COALESCE(e.time, '00:00') LIMIT 120"
@@ -360,7 +360,11 @@ async function getCalendar(env, args) {
       security: e.security_name ? { name: e.security_name, ticker: e.ticker } : null,
       detail: e.detail ? JSON.parse(e.detail) : null,
       source: e.source,
+      // 실적 발표일만: 확정(회사·거래소 공지 또는 이미 발표) / 예상(과거 패턴·제공처 추정) / null(모름)
+      status: e.kind === "earnings" ? (e.confirmed === 1 ? "확정" : e.confirmed === 0 ? "예상" : null) : undefined,
     })),
+    note: "실적 발표일의 status가 '예상'이면 회사가 아직 공지하지 않은 날짜다(국내는 작년 같은 분기 잠정실적 공시일 기준, " +
+      "미국은 야후 추정). '확정'과 구분해서 전달하라.",
   };
 }
 
@@ -539,7 +543,8 @@ export const READ_TOOLS = [
   {
     name: "get_calendar",
     title: "일정",
-    description: "실적 발표일, FOMC·금통위, CPI·고용 같은 거시 일정과 직접 넣은 일정을 기간으로 준다. 기본은 오늘부터 30일.",
+    description: "실적 발표일, FOMC·금통위, CPI·고용 같은 거시 일정과 직접 넣은 일정을 기간으로 준다. 기본은 오늘부터 30일. " +
+      "실적 발표일은 status로 확정/예상을 구분한다(국내·미국 보유·관심 종목).",
     inputSchema: {
       type: "object",
       properties: {

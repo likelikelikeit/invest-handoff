@@ -126,3 +126,77 @@ export async function dartFundamentals(apiKey, corpCode, now = new Date(), {
     progress: { offset: start, nextOffset, total: reports.length, done: !errors.length && nextOffset >= reports.length },
   };
 }
+
+// ── 국내 실적 발표일 (SPEC §5.7) ─────────────────────────
+// 출처: DART 공시 목록(list.json)의 공정공시(I002). 회사가 내는 '영업(잠정)실적(공정공시)'의 접수일이 곧 발표일이다.
+//   - 오늘 잠정실적 공시가 들어왔으면 → 오늘, 확정(이미 발표)
+//   - 아니면 → 작년 같은 분기 잠정실적 공시일 + 1년(주말이면 다음 월요일), 예상
+// '기업설명회(IR) 개최' 안내공시에서 확정 날짜를 읽는 일은 문서를 받아 풀어야 해 맥 미니 스크립트가 한다
+// (scripts/kr-earnings-confirm.mjs). 잠정실적 공시를 내지 않는 회사는 여기서 날짜를 만들지 않는다.
+
+const LIST_API = "https://opendart.fss.or.kr/api/list.json";
+
+/** 최근 공정공시 목록. → [{report_nm, rcept_dt:'YYYY-MM-DD', rcept_no}] */
+export async function dartDisclosures(apiKey, corpCode, from, to) {
+  if (!apiKey) throw new Error("DART_API_KEY가 없습니다");
+  const u = new URL(LIST_API);
+  u.searchParams.set("crtfc_key", apiKey);
+  u.searchParams.set("corp_code", corpCode);
+  u.searchParams.set("bgn_de", from.replace(/-/g, ""));
+  u.searchParams.set("end_de", to.replace(/-/g, ""));
+  u.searchParams.set("pblntf_detail_ty", "I002");
+  u.searchParams.set("page_count", "100");
+  const res = await fetch(u, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error("DART 목록이 " + res.status + " 응답");
+  return parseDisclosureList(await res.json());
+}
+
+export function parseDisclosureList(data) {
+  if (!data || data.status === "013") return [];
+  if (data.status !== "000") throw new Error("DART " + (data.status || "오류") + ": " + (data.message || "응답 오류"));
+  return (data.list || []).map((x) => ({
+    report_nm: String(x.report_nm || "").trim(),
+    rcept_dt: /^\d{8}$/.test(String(x.rcept_dt))
+      ? x.rcept_dt.slice(0, 4) + "-" + x.rcept_dt.slice(4, 6) + "-" + x.rcept_dt.slice(6, 8) : null,
+    rcept_no: x.rcept_no || null,
+  })).filter((x) => x.rcept_dt);
+}
+
+const isPrelim = (nm) => /잠정/.test(nm) && /실적/.test(nm) && !/정정/.test(nm);
+
+function addDays(date, n) {
+  const d = new Date(date + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function onWeekday(date) {
+  const dow = new Date(date + "T00:00:00Z").getUTCDay();
+  return dow === 6 ? addDays(date, 2) : dow === 0 ? addDays(date, 1) : date;
+}
+
+/**
+ * 공시 목록 → 다음 실적 발표일. 순수 함수. today는 KST 'YYYY-MM-DD'.
+ * → {date, confirmed: 1|0, detail} 또는 null(근거 없음)
+ */
+export function krEarningsFromDisclosures(list, today) {
+  const prelim = list.filter((x) => isPrelim(x.report_nm)).map((x) => x.rcept_dt).sort();
+  if (!prelim.length) return null;
+  if (prelim.includes(today)) return { date: today, confirmed: 1, detail: { basis: "오늘 잠정실적 공시" } };
+
+  // 작년 같은 분기 공시일 + 1년. 올해 그 분기를 이미 냈으면(후보일 ±45일 안에 더 최근 공시가 있으면) 건너뛴다.
+  const candidates = [];
+  for (const d of prelim) {
+    const next = onWeekday(String(Number(d.slice(0, 4)) + 1) + d.slice(4));
+    if (prelim.some((r) => r > d && r >= addDays(next, -45) && r <= addDays(next, 45))) continue;
+    if (next > today) candidates.push({ date: next, from: d });
+    // 작년보다 늦어지는 중: 후보일이 막 지났는데 아직 공시가 없으면 다음 영업일로 미룬다
+    else if (next > addDays(today, -30)) candidates.push({ date: onWeekday(addDays(today, 1)), from: d, late: true });
+  }
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => (a.date < b.date ? -1 : 1));
+  const c = candidates[0];
+  return {
+    date: c.date, confirmed: 0,
+    detail: { basis: "작년 같은 분기 잠정실적 공시일 + 1년", last_year: c.from, ...(c.late ? { note: "작년보다 늦어지는 중" } : {}) },
+  };
+}

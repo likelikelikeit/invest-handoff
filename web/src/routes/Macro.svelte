@@ -71,7 +71,7 @@
     <p class="note">매일 08:30(KST)에 자동으로 받습니다. 키를 막 넣었을 때처럼 과거 이력까지 지금 받으려면 누르세요.</p>
     <button class="btn" onclick={refresh} disabled={refreshing}>{refreshing ? "받는 중…" : "거시·실적일 지금 받기"}</button>
     {#if report}
-      <p class="note num">{stamp(report.at)} · {Object.entries(report.macro).map(([k, n]) => k + " " + n + "개").join(" · ")} · 실적일 {report.earnings}개{report.errors.length ? " · 실패: " + report.errors.join(" / ") : ""}</p>
+      <p class="note num">{stamp(report.at)} · {Object.entries(report.macro).map(([k, n]) => k + " " + n + "개").join(" · ")}{report.fundamentals ? " · 재무·실적일 " + report.fundamentals.done + "/" + report.fundamentals.total + "종목" : ""}{report.errors.length ? " · 실패: " + report.errors.join(" / ") : ""}</p>
     {/if}
   </section>
 </Gate>

@@ -11,14 +11,12 @@ import {
   listChanges, patchChange, listScenarios, createScenario, deleteScenario,
 } from "./routes/portfolio.js";
 import { getPrices, backfillPrices, getStatus } from "./routes/prices.js";
-import { runDaily, CRON_KR, CRON_US } from "./cron/daily.js";
-import { runWeekly, CRON_WEEKLY } from "./cron/weekly.js";
+import { runTick, CRON_TICK } from "./cron/tick.js";
 import { listViews, latestViews, createView, patchView, deleteView } from "./routes/views.js";
 import { getFundamentals, refreshFundamentalsRoute } from "./routes/fundamentals.js";
 import { listValuationScenarios, saveValuationScenario, deleteValuationScenario } from "./routes/scenarios.js";
 import { getRules, listRules, saveRules, getTech, createCall, patchCall, listCalls } from "./routes/tech.js";
 import { listEvents, createEvent, deleteEvent, getMacro, saveDots, refreshMacro } from "./routes/calendar.js";
-import { runMisc, CRON_MISC } from "./cron/misc.js";
 import { listDrafts, applyDraft, discardDraft } from "./routes/drafts.js";
 import { listSuspensions, createSuspension, deleteSuspension } from "./routes/coverage.js";
 import { listNotes, listNoteTags, createNote, patchNote, deleteNote } from "./routes/notes.js";
@@ -151,9 +149,7 @@ export default {
 
   // 크론 (SPEC §7.3). 어떤 크론인지는 event.cron 문자열로 가른다.
   async scheduled(event, env, ctx) {
-    const which = event.cron === CRON_KR ? "kr" : event.cron === CRON_US ? "us" : null;
-    if (which) ctx.waitUntil(runDaily(env, which, new Date(event.scheduledTime)));
-    else if (event.cron === CRON_WEEKLY) ctx.waitUntil(runWeekly(env, new Date(event.scheduledTime)));
-    else if (event.cron === CRON_MISC) ctx.waitUntil(runMisc(env, new Date(event.scheduledTime)));
+    // 트리거는 5분 틱 하나다. 시각을 보고 시세·마감·거시·재무 순환을 고른다 (cron/tick.js).
+    if (event.cron === CRON_TICK) ctx.waitUntil(runTick(env, new Date(event.scheduledTime)));
   },
 };

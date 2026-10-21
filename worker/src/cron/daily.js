@@ -1,27 +1,24 @@
-// 일일 시세 크론 (SPEC §7.3, UTC 고정 — 서머타임 계산 없음).
-//   0 7  * * MON-FRI  (KST 16:00)      국내 종목·지수·환율, 국내 보유 스냅샷
-//   0 22 * * MON-FRI  (KST 익일 07:00)  미국 종목·지수·환율, 전체 보유 스냅샷(하루치 확정)
-// 휴장일에도 돌지만 같은 값을 UPSERT할 뿐이라 무해하다.
+// 시세 크론 (SPEC §7.3, UTC 고정 — 서머타임 계산 없음). 5분 틱(cron/tick.js)이 시각을 보고 부른다.
+//   runQuotes  장중 5분마다: 그 시장 종목·지수·환율의 오늘 봉을 바뀐 것만 쓴다
+//   runDaily   장 마감 뒤 하루 한 번: 오늘 봉 확정 + 빈 날 메우기 + 보유 스냅샷 (+ 미국장: 의견 평가, 국내장: DART 보강)
 //
-// 한도: 서브요청 50·D1 쿼리 50/호출. 최근 5일 봉만 받고, 종목 하나당 fetch 1 + 쿼리 1.
-// 이력이 비어 있는 종목(새로 추가된 것)은 한 번에 BACKFILL_PER_RUN개씩 5년치를 메운다.
+// 한도 (호출당 외부 요청 50·D1 문장 50, lib/budget.js): 시세는 야후 v7 quote로 50종목씩 묶어 받고,
+// 오늘 봉은 종목 수와 상관없이 D1 문장 1개로 쓴다. 그래서 종목이 100개를 넘어도 요청 2~3번이다.
+// 종목별 일봉 이력(chart)은 새 종목 백필·빈 날 메우기에만, 남은 예산 안에서 쓴다.
 
-import { history } from "../sources/yahoo.js";
-import { upsertPricesStmt, trackedSecurities, snapshotStmt, BACKFILL_MIN_ROWS } from "../lib/prices.js";
+import { history, quoteBatch, FX_SYMBOL } from "../sources/yahoo.js";
+import { upsertPricesStmt, upsertBarsStmt, trackedSecurities, snapshotStmt, BACKFILL_MIN_ROWS } from "../lib/prices.js";
 import { nowIso } from "../lib/time.js";
 import { refreshFundamentals } from "./weekly.js";
 import { fillCallPricesStmts } from "../routes/tech.js";
 import { evaluateViews } from "../lib/view-evaluation.js";
 import { meter } from "../lib/budget.js";
 
-// 요일은 이름으로 쓴다. Cloudflare 크론은 1=일요일이라 "1-5"가 일~목이 돼 금요일 마감을 놓쳤다(2026-10-22 수정).
-export const CRON_KR = "0 7 * * MON-FRI";
-export const CRON_US = "0 22 * * MON-FRI";
-
-const MAX_DAILY = 35; // 종목 수가 늘면 여기서 잘린다. 넘으면 meta에 남겨 알 수 있게.
 const BACKFILL_PER_RUN = 2;
-// DART 분기 이력이 이만큼 안 되는 국내 종목은 일일 크론마다 하나씩, 한 사업연도(최대 4요청)씩 보강한다.
-// 주간 크론은 한 주에 한 종목만 DART를 부르므로, 새로 고유번호를 넣은 종목이 몇 주씩 기다리지 않게.
+const GAP_DAYS = 5;        // 마지막 봉이 이보다 오래된 종목은 일봉 이력으로 메운다
+const GAP_PER_RUN = 5;
+// DART 분기 이력이 이만큼 안 되는 국내 종목은 국내장 마감 때마다 하나씩, 한 사업연도(최대 4요청)씩 보강한다.
+// 과거 이력을 한 번에 채우는 건 맥 미니의 scripts/dart-history.mjs가 한다.
 export const DART_MIN_QUARTERS = 12;
 export const DART_REPORTS_PER_RUN = 4;
 
@@ -44,7 +41,32 @@ export async function dartBackfillTarget(env, now = new Date()) {
   ).bind(DART_MIN_QUARTERS, since).first();
 }
 
-async function refresh(env, secs, range) {
+const putMeta = (env, key, value, at) => env.DB.prepare(
+  "INSERT INTO meta (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+).bind(key, typeof value === "string" ? value : JSON.stringify(value), at);
+
+/** 시장 하나(또는 여럿)의 종목 + 환율. markets: ['KR'] | ['US'] | ['KR','US'] | ['FX'] */
+export function pickMarket(all, markets) {
+  return all.filter((s) => s.ysym === FX_SYMBOL || markets.includes(s.market));
+}
+
+/** 묶음 시세 → 오늘 봉을 한 문장으로. → {written, bars, errors, quotes} */
+async function writeBars(env, secs) {
+  if (!secs.length) return { bars: 0, written: 0, errors: [], quotes: new Map() };
+  const quotes = await quoteBatch(env, secs.map((s) => s.ysym));
+  const bars = [];
+  const missing = [];
+  for (const s of secs) {
+    const q = quotes.get(s.ysym);
+    if (q?.bar) bars.push({ security_id: s.id, ...q.bar });
+    else if (!q) missing.push(s.ysym);
+  }
+  const r = bars.length ? await upsertBarsStmt(env, bars).run() : { meta: { changes: 0 } };
+  return { bars: bars.length, written: r.meta.changes, errors: missing.length ? ["시세 없음: " + missing.join(", ")] : [], quotes };
+}
+
+/** 종목별 일봉 이력 (새 종목 백필·빈 날 메우기). 문장은 종목마다 1개라 batch로. */
+async function refreshHistory(env, secs, range) {
   const settled = await Promise.allSettled(secs.map((s) => history(s.ysym, range)));
   const stmts = [];
   const errors = [];
@@ -56,42 +78,69 @@ async function refresh(env, secs, range) {
   return { ok: stmts.length, errors };
 }
 
-/** which: 'kr' | 'us'. now는 테스트용. */
-export async function runDaily(env, which, now = new Date()) {
-  const m = meter(env);
+/** 장중 5분: 그 시장 오늘 봉만. 보고는 meta 'cron:quotes'. */
+export async function runQuotes(env, markets, now = new Date(), m = null) {
+  const own = !m;
+  m ||= meter(env);
+  try {
+    const secs = pickMarket(await trackedSecurities(env), markets);
+    let r;
+    try { r = await writeBars(env, secs); } catch (e) { r = { bars: 0, written: 0, errors: [String(e.message || e)] }; }
+    const report = { at: nowIso(now), markets, symbols: secs.length, bars: r.bars, written: r.written, errors: r.errors };
+    await putMeta(env, "cron:quotes", report, report.at).run();
+    return report;
+  } finally {
+    if (own) m.restore();
+  }
+}
+
+/** which: 'kr' | 'us'. 장 마감 뒤 하루 한 번. m은 틱이 넘겨주는 계량기(없으면 직접 만든다). */
+export async function runDaily(env, which, now = new Date(), m = null) {
+  const own = !m;
+  m ||= meter(env);
   try {
     return await daily(env, which, now, m);
   } finally {
-    m.restore();
+    if (own) m.restore();
   }
 }
 
 async function daily(env, which, now, m) {
   const all = await trackedSecurities(env);
-  const isFx = (s) => s.ysym === "KRW=X";
-  const pick = all.filter((s) => isFx(s) || (which === "kr" ? s.market === "KR" : s.market === "US"));
-  const needBackfill = all.filter((s) => s.n < BACKFILL_MIN_ROWS).slice(0, BACKFILL_PER_RUN);
-  const backfillIds = new Set(needBackfill.map((s) => s.id));
-  const daily = pick.filter((s) => !backfillIds.has(s.id));
-  const truncated = daily.length > MAX_DAILY;
-
-  const a = await refresh(env, daily.slice(0, MAX_DAILY), "5d");
-  const b = needBackfill.length ? await refresh(env, needBackfill, "5y") : { ok: 0, errors: [] };
-
-  // 스냅샷 날짜: 두 크론 모두 UTC 날짜 = 그 거래일의 KST 날짜 (07 UTC = 16 KST 같은 날, 22 UTC = 익일 07 KST이므로 전날)
+  const pick = pickMarket(all, [which === "kr" ? "KR" : "US"]);
+  const errors = [];
   const date = now.toISOString().slice(0, 10);
+
+  // 1) 오늘 봉 확정 (묶음 시세, 요청 1~3번)
+  let a = { bars: 0, written: 0 };
+  try {
+    a = await writeBars(env, pick);
+    errors.push(...a.errors);
+  } catch (e) {
+    errors.push("묶음 시세 실패: " + String(e.message || e));
+  }
+
+  // 2) 새 종목 5년 백필, 3) 마지막 봉이 오래된 종목 메우기 — 남은 예산 안에서만
+  const needBackfill = all.filter((s) => s.n < BACKFILL_MIN_ROWS).slice(0, Math.max(0, Math.min(BACKFILL_PER_RUN, m.fetchLeft() - 10)));
+  const b = needBackfill.length ? await refreshHistory(env, needBackfill, "5y") : { ok: 0, errors: [] };
+  const stale = new Date(now.getTime() - GAP_DAYS * 86400000).toISOString().slice(0, 10);
+  const done = new Set(needBackfill.map((s) => s.id));
+  const gaps = pick.filter((s) => !done.has(s.id) && s.n >= BACKFILL_MIN_ROWS && (!s.last || s.last < stale))
+    .slice(0, Math.max(0, Math.min(GAP_PER_RUN, m.fetchLeft() - 8)));
+  const g = gaps.length ? await refreshHistory(env, gaps, "1mo") : { ok: 0, errors: [] };
+  errors.push(...b.errors, ...g.errors);
+
+  // 스냅샷 날짜: UTC 날짜 = 그 거래일의 KST 날짜 (07 UTC = 16 KST 같은 날, 22 UTC = 익일 07 KST이므로 전날)
   const snap = await snapshotStmt(env, date, which === "kr" ? "KR" : "ALL").run();
   // 판정 기록의 1주·1개월 뒤 가격 (계기판 자체 평가용, SPEC §5.6.5). 쿼리 2개.
   const filled = await env.DB.batch(fillCallPricesStmts(env));
-  // 전체 스냅샷이 확정되는 미국장 크론에서만 의견 만기 평가. 한 번에 D1 쿼리 3개.
+  // 전체 스냅샷이 확정되는 미국장 마감에서만 의견 만기 평가. 한 번에 D1 쿼리 3개.
   const viewsEvaluated = which === "us" ? await evaluateViews(env, now) : 0;
 
   // 국내 재무 이력 보강 (한 종목). 실패해도 시세·스냅샷 결과는 그대로 남긴다.
-  let dart = null;
-  const dartErrors = [];
-  // 국내 크론에서만 수행한다. 시세 최대 37회 + DART 4회로 외부 요청 50회 안에 남는다.
   // 예산이 모자라면 DART는 다음 실행으로 미룬다(시도 기록을 남기지 않으니 내일 다시 고른다).
-  const target = which === "kr" && m.left() >= DART_REPORTS_PER_RUN ? await dartBackfillTarget(env, now) : null;
+  let dart = null;
+  const target = which === "kr" && m.fetchLeft() >= DART_REPORTS_PER_RUN && m.d1Left() >= 6 ? await dartBackfillTarget(env, now) : null;
   if (target) {
     try {
       const r = await refreshFundamentals(env, target, {
@@ -99,33 +148,25 @@ async function daily(env, which, now, m) {
         dartCount: DART_REPORTS_PER_RUN, dartBatchByYear: true, now,
       });
       const progress = r.dartProgress || { nextOffset: target.dart_offset, done: true };
-      const metaStmts = [env.DB.prepare(
-        "INSERT INTO meta (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
-      ).bind("dart:cursor:" + target.id, progress.done ? "0" : String(progress.nextOffset), nowIso(now))];
-      if (progress.done || r.errors.length) metaStmts.push(env.DB.prepare(
-        "INSERT INTO meta (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
-      ).bind("dart:tried:" + target.id, date, nowIso(now)));
+      const metaStmts = [putMeta(env, "dart:cursor:" + target.id, progress.done ? "0" : String(progress.nextOffset), nowIso(now))];
+      if (progress.done || r.errors.length) metaStmts.push(putMeta(env, "dart:tried:" + target.id, date, nowIso(now)));
       await env.DB.batch(metaStmts);
       dart = { ysym: target.ysym, financials: r.financials, progress };
-      dartErrors.push(...r.errors.map((e) => target.ysym + ": " + e));
+      errors.push(...r.errors.map((e) => target.ysym + ": " + e));
     } catch (e) {
-      await env.DB.prepare(
-        "INSERT INTO meta (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
-      ).bind("dart:tried:" + target.id, date, nowIso(now)).run();
-      dartErrors.push(target.ysym + ": " + String(e.message || e));
+      await putMeta(env, "dart:tried:" + target.id, date, nowIso(now)).run();
+      // 몇 번째 외부 요청에서 죽었는지 남겨 한도 문제인지 DART 문제인지 가른다
+      errors.push(target.ysym + ": " + String(e.message || e) + " (외부 요청 " + m.fetches + "번째, D1 " + m.d1 + ")");
     }
   }
 
   const report = {
     at: nowIso(now), which, date,
-    updated: a.ok, backfilled: b.ok, snapshots: snap.meta.changes, dart, subrequests: m.fetches, d1_calls: m.d1,
+    updated: a.bars, written: a.written, backfilled: b.ok, gaps_filled: g.ok, snapshots: snap.meta.changes, dart,
+    subrequests: m.fetches, d1_calls: m.d1,
     tech_filled: filled.reduce((s, r) => s + (r.meta?.changes || 0), 0), views_evaluated: viewsEvaluated,
-    errors: a.errors.concat(b.errors, dartErrors),
-    truncated: truncated ? daily.length - MAX_DAILY : 0,
+    errors,
   };
-  await env.DB.prepare(
-    "INSERT INTO meta (key, value, updated_at) VALUES (?1, ?2, ?3) " +
-    "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
-  ).bind("cron:" + which, JSON.stringify(report), report.at).run();
+  await putMeta(env, "cron:" + which, report, report.at).run();
   return report;
 }

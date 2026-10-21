@@ -108,32 +108,67 @@ describe("D1 쿼리 (실제 SQLite)", () => {
   });
 });
 
-describe("runDaily (야후는 가짜)", () => {
-  it("국내 크론: 국내+환율만 갱신, 비어 있는 종목은 백필, 국내 스냅샷, meta 보고", async () => {
-    const env = { DB: makeDb() };
-    const at = "2026-09-19T00:00:00+09:00";
-    env.DB.raw.prepare("INSERT INTO securities (name, ticker, ysym, market, currency, created_at, updated_at) VALUES (?,?,?,?,?,?,?)")
-      .run("삼성전자", "005930", "005930.KS", "KR", "KRW", at, at);
-    env.DB.raw.exec("INSERT INTO positions VALUES (5, 10, 50000, 'KRW', 'manual', '" + at + "')");
+describe("시세 크론 (야후는 가짜)", () => {
+  const at = "2026-09-19T00:00:00+09:00";
+  let env, calls, quotes;
+  const bar = (date, close) => ({ date, open: close, high: close, low: close, close, volume: 1 });
 
-    const calls = [];
+  async function load() {
     vi.resetModules();
     vi.doMock("../src/sources/yahoo.js", () => ({
+      FX_SYMBOL: "KRW=X",
       history: async (sym, range) => {
         calls.push(sym + ":" + range);
         return [{ date: "2026-09-18", open: 1, high: 1, low: 1, close: sym === "KRW=X" ? 1400 : 61000, volume: 1, adj_close: 1 }];
       },
+      quoteBatch: async (_env, syms) => {
+        calls.push("batch:" + syms.join(","));
+        return new Map(syms.filter((s) => quotes[s]).map((s) => [s, { symbol: s, price: quotes[s].close, bar: quotes[s] }]));
+      },
     }));
-    const { runDaily } = await import("../src/cron/daily.js");
-    const rep = await runDaily(env, "kr", new Date("2026-09-18T07:00:00Z"));
+    const mod = await import("../src/cron/daily.js");
     vi.doUnmock("../src/sources/yahoo.js");
+    return mod;
+  }
 
-    // 모든 종목이 이력 0행이라 앞의 2개는 5y 백필, 나머지 국내·환율은 5d
-    expect(calls.filter((c) => c.endsWith(":5y"))).toHaveLength(2);
-    expect(calls.some((c) => c.startsWith("^GSPC:5d"))).toBe(false);
-    expect(rep.date).toBe("2026-09-18");
-    expect(rep.snapshots).toBe(1);
-    const meta = await env.DB.prepare("SELECT value FROM meta WHERE key = 'cron:kr'").first();
-    expect(JSON.parse(meta.value).updated + JSON.parse(meta.value).backfilled).toBe(calls.length);
+  beforeEach(() => {
+    env = { DB: makeDb() };
+    calls = [];
+    quotes = { "005930.KS": bar("2026-09-18", 61000), "KRW=X": bar("2026-09-18", 1400), "^KS11": bar("2026-09-18", 2600), NVDA: bar("2026-09-17", 200) };
+    env.DB.raw.prepare("INSERT INTO securities (name, ticker, ysym, market, currency, created_at, updated_at) VALUES (?,?,?,?,?,?,?)")
+      .run("삼성전자", "005930", "005930.KS", "KR", "KRW", at, at);
+    env.DB.raw.prepare("INSERT INTO securities (name, ticker, ysym, market, currency, created_at, updated_at) VALUES (?,?,?,?,?,?,?)")
+      .run("엔비디아", "NVDA", "NVDA", "US", "USD", at, at);
+    env.DB.raw.exec("INSERT INTO positions VALUES (5, 10, 50000, 'KRW', 'manual', '" + at + "'), (6, 1, 100, 'USD', 'manual', '" + at + "')");
+  });
+
+  it("국내 마감: 국내+환율을 한 요청으로 받고, 이력 없는 종목은 백필, 국내 스냅샷, meta 보고", async () => {
+    const { runDaily } = await load();
+    const rep = await runDaily(env, "kr", new Date("2026-09-18T07:00:00Z"));
+    expect(calls.filter((c) => c.startsWith("batch:"))).toEqual(["batch:^KS11,KRW=X,005930.KS"]); // 미국 종목은 없다
+    expect(calls.filter((c) => c.endsWith(":5y"))).toHaveLength(2);                                    // 백필은 한 번에 2개
+    expect(rep).toMatchObject({ date: "2026-09-18", updated: 3, snapshots: 1 });
+    expect(rep.subrequests).toBe(0); // 소스가 가짜라 실제 fetch는 없다
+    const meta = JSON.parse((await env.DB.prepare("SELECT value FROM meta WHERE key = 'cron:kr'").first()).value);
+    expect(meta.updated).toBe(3);
+  });
+
+  it("장중 5분: 바뀐 봉만 쓴다 (같은 값이면 쓰기 0)", async () => {
+    const { runQuotes } = await load();
+    const first = await runQuotes(env, ["KR"], new Date("2026-09-18T02:00:00Z"));
+    expect(first).toMatchObject({ symbols: 3, bars: 3, written: 3 });
+    const again = await runQuotes(env, ["KR"], new Date("2026-09-18T02:05:00Z"));
+    expect(again.written).toBe(0);
+    quotes["005930.KS"] = { ...quotes["005930.KS"], close: 61500, high: 61500 };
+    expect((await runQuotes(env, ["KR"], new Date("2026-09-18T02:10:00Z"))).written).toBe(1);
+    const r = await env.DB.prepare("SELECT close, adj_close FROM prices WHERE security_id = 5").first();
+    expect(r).toEqual({ close: 61500, adj_close: 61000 }); // adj_close는 일봉 이력이 고친다
+  });
+
+  it("환율만: FX 틱은 환율 한 종목", async () => {
+    const { runQuotes } = await load();
+    const r = await runQuotes(env, ["FX"], new Date("2026-09-18T10:30:00Z"));
+    expect(calls).toEqual(["batch:KRW=X"]);
+    expect(r.bars).toBe(1);
   });
 });

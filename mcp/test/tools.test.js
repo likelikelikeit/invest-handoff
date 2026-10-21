@@ -195,6 +195,17 @@ describe("get_calendar", () => {
     expect(r.timezone).toContain("KST");
   });
 
+  it("실적 발표일은 확정/예상을 구분한다", async () => {
+    env.DB.raw.prepare(
+      "INSERT INTO events (date, kind, security_id, title, source, detail, created_at, confirmed) VALUES (?, 'earnings', (SELECT id FROM securities WHERE ticker='005930'), '실적 발표 (예상)', 'dart', ?, 'x', 0)"
+    ).run(dayAgo(-5), JSON.stringify({ basis: "작년 같은 분기 잠정실적 공시일 + 1년", last_year: "2025-10-08" }));
+    const r = await run("get_calendar");
+    const sam = r.events.find((e) => e.security?.ticker === "005930");
+    expect(sam).toMatchObject({ status: "예상", source: "dart", detail: { last_year: "2025-10-08" } });
+    expect(r.events.find((e) => e.kind === "macro").status).toBeUndefined();
+    expect(r.note).toContain("예상");
+  });
+
   it("기간을 넓히면 먼 일정도 나온다", async () => {
     const r = await run("get_calendar", { from: dayAgo(0), to: dayAgo(-200) });
     expect(r.events.map((e) => e.title)).toContain("먼 미래 일정");

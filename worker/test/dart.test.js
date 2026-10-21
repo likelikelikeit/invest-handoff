@@ -114,3 +114,31 @@ describe("dartBackfillTarget (실제 SQLite)", () => {
     expect(target).toMatchObject({ id: 5, dart_offset: 6 });
   });
 });
+
+describe("국내 실적 발표일 (DART 공정공시)", () => {
+  const P = (d) => ({ report_nm: "연결재무제표기준영업(잠정)실적(공정공시)", rcept_dt: d, rcept_no: d });
+  const samsung = ["2025-10-14", "2026-01-08", "2026-04-07", "2026-07-07", "2026-10-13"].map(P);
+
+  it("이번 분기를 이미 냈으면 다음 분기: 작년 같은 분기 + 1년", async () => {
+    const { krEarningsFromDisclosures } = await import("../src/sources/dart.js");
+    expect(krEarningsFromDisclosures(samsung, "2026-10-22")).toMatchObject({
+      date: "2027-01-08", confirmed: 0, detail: { last_year: "2026-01-08" },
+    });
+  });
+
+  it("오늘 잠정실적 공시가 들어왔으면 확정", async () => {
+    const { krEarningsFromDisclosures } = await import("../src/sources/dart.js");
+    expect(krEarningsFromDisclosures(samsung, "2026-10-13")).toMatchObject({ date: "2026-10-13", confirmed: 1 });
+  });
+
+  it("작년보다 늦어지면 다음 영업일, 주말이면 월요일, 근거가 없으면 null", async () => {
+    const { krEarningsFromDisclosures, parseDisclosureList } = await import("../src/sources/dart.js");
+    expect(krEarningsFromDisclosures([P("2025-10-14")], "2026-10-20")).toMatchObject({ date: "2026-10-21", detail: { note: "작년보다 늦어지는 중" } });
+    expect(krEarningsFromDisclosures([P("2025-10-10")], "2026-09-01").date).toBe("2026-10-12"); // 2026-10-10은 토요일
+    expect(krEarningsFromDisclosures([{ report_nm: "기업설명회(IR)개최(안내공시)", rcept_dt: "2026-10-01" }], "2026-10-02")).toBeNull();
+    expect(krEarningsFromDisclosures([{ report_nm: "[기재정정]영업(잠정)실적(공정공시)", rcept_dt: "2026-10-02" }], "2026-10-02")).toBeNull();
+    expect(parseDisclosureList({ status: "000", list: [{ report_nm: "x", rcept_dt: "20261008", rcept_no: "1" }] }))
+      .toEqual([{ report_nm: "x", rcept_dt: "2026-10-08", rcept_no: "1" }]);
+    expect(parseDisclosureList({ status: "013" })).toEqual([]);
+  });
+});

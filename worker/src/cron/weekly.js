@@ -1,25 +1,28 @@
-// M5a 주간 재무·컨센서스 갱신 (일요일 23 UTC = 월요일 08 KST).
+// 재무·컨센서스·실적일 순환 (SPEC §5.4·§5.7). 5분 틱(cron/tick.js)이 장이 닫힌 시간마다 부른다.
+// 보유·관심 종목 전부를 하루에 한 바퀴 돈다. 한 번 실행에는 남은 예산(lib/budget.js)만큼만 하고,
+// 어디까지 했는지(meta 'rot:fund')를 남겨 다음 틱이 이어서 한다. 그래서 종목이 100개를 넘어도 하루 안에 끝난다.
+// (예전에는 일요일 한 번에 8종목씩이라 16종목이 한 바퀴 도는 데 2주였고, 고정 계산이 한도를 넘었다.)
 
 import { yahooFundamentals } from "../sources/yahoo.js";
 import { naverFundamentals } from "../sources/naver.js";
-import { dartFundamentals } from "../sources/dart.js";
+import { dartFundamentals, dartDisclosures, krEarningsFromDisclosures } from "../sources/dart.js";
 import { trackedEquities, upsertFinancialsStmt, upsertEstimatesStmt, replaceEarningsStmts } from "../lib/fundamentals.js";
-import { nowIso } from "../lib/time.js";
+import { nowIso, todayKst } from "../lib/time.js";
 import { meter } from "../lib/budget.js";
 
-// Cloudflare weekday는 1=일요일이라 모호하지 않은 SUN 표기를 쓴다.
-export const CRON_WEEKLY = "0 23 * * SUN";
-// 한 번에 최대 8종목. 실제로는 종목마다 외부 요청 수를 어림해 예산(lib/budget.js) 안에서 멈춘다.
-// 예전 고정 계산(DART 16 + 국내 3씩 ≤ 40)은 미국 종목의 세션 갱신·환율 이력을 빼먹어 50을 넘겼다(2026-10-19).
-const MAX_PER_RUN = 8;
-const DART_PER_RUN = 1;
-// 주간 DART는 최근 한 사업연도(최대 4건)만 다시 본다. 과거 이력은 일일 크론이 4건씩 채운다.
-const WEEKLY_DART_REPORTS = 4;
+const addDaysIso = (date, n) => {
+  const d = new Date(date + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+// DART 정기보고서는 분기에 한 번 나오니 종목마다 주 1회(id % 7 == 요일)만 최근 4건을 다시 본다.
+const DART_REPORTS = 4;
 const SESSION_RESERVE = 3; // 야후 쿠키·crumb 갱신 (12시간 캐시가 만료됐을 때)
 
 /** 이 종목을 갱신하는 데 드는 외부 요청 어림값 */
-export function fetchCost(sec, withDart) {
-  if (sec.market === "KR") return 3 + (withDart ? WEEKLY_DART_REPORTS : 0);
+export function fetchCost(sec, withDart, withDartList = false) {
+  if (sec.market === "KR") return 3 + (withDart ? DART_REPORTS : 0) + (withDartList ? 1 : 0);
   const fx = sec.financial_currency && sec.financial_currency !== sec.currency ? 2 : 0;
   return 2 + fx;
 }
@@ -51,12 +54,21 @@ export async function refreshFundamentals(env, secOrId, {
         offset: dartOffset, count: dartCount, batchByYear: dartBatchByYear,
       })]);
     }
+    // 국내 실적 발표일: DART 공정공시 목록 (요청 1번)
+    if (withMarketSource && env.DART_API_KEY && sec.dart_corp_code) {
+      sources.push(["dart-list", async () => {
+        const today = todayKst(now);
+        const list = await dartDisclosures(env.DART_API_KEY, sec.dart_corp_code, addDaysIso(today, -400), today);
+        const e = krEarningsFromDisclosures(list, today);
+        return { financials: [], estimates: [], earnings: e ? { ...e, source: "dart" } : null };
+      }]);
+    }
   }
 
   const settled = await Promise.allSettled(sources.map(([, fn]) => fn()));
   const financials = [];
   const estimates = [];
-  let earningsDate = null;
+  let earnings = null; // {date, confirmed, source, detail}
   let dartProgress = null;
   let yahooMetadata = null;
   const errors = [];
@@ -74,14 +86,17 @@ export async function refreshFundamentals(env, secOrId, {
       });
       financials.push(...rows);
       estimates.push(...(r.value.estimates || []));
-      earningsDate ||= r.value.earningsDate || null;
+      if (!earnings && r.value.earnings) earnings = r.value.earnings;
+      if (!earnings && r.value.earningsDate) {
+        earnings = { date: r.value.earningsDate, confirmed: r.value.earningsConfirmed ?? null, source: "yahoo", detail: null };
+      }
       if (name === "dart") dartProgress = r.value.progress || null;
       if (name === "yahoo") yahooMetadata = r.value;
       errors.push(...(r.value.errors || []).map((e) => name + ": " + e));
     }
   });
   // DART 배치가 정상 응답했지만 해당 보고서가 없는 경우에도 커서는 전진해야 한다.
-  if (!financials.length && !estimates.length && !earningsDate && !dartProgress) {
+  if (!financials.length && !estimates.length && !earnings && !dartProgress) {
     throw new Error(errors[0] || "재무 데이터를 찾지 못했습니다");
   }
 
@@ -100,55 +115,75 @@ export async function refreshFundamentals(env, secOrId, {
     ));
   }
   if (estimates.length) stmts.push(upsertEstimatesStmt(env, sec.id, estimates));
-  if (earningsDate) stmts.push(...replaceEarningsStmts(env, sec.id, earningsDate, at, now.toISOString().slice(0, 10)));
+  // 지난 날짜(이미 발표한 분기)는 넣지 않는다
+  const today = now.toISOString().slice(0, 10);
+  if (earnings && earnings.date >= today) {
+    stmts.push(...replaceEarningsStmts(env, sec.id, earnings.date, at, today, earnings));
+  }
   if (stmts.length) await env.DB.batch(stmts);
-  return { security_id: sec.id, financials: financials.length, estimates: estimates.length, earningsDate, errors, dartProgress };
+  return { security_id: sec.id, financials: financials.length, estimates: estimates.length, earnings, errors, dartProgress };
 }
 
-/** 무료 플랜 쿼리·서브요청 한도를 위해 8종목씩 순환한다. */
-export async function runWeekly(env, now = new Date()) {
-  const m = meter(env);
+/**
+ * 순환 한 걸음. m은 틱이 넘겨주는 계량기(없으면 직접 만든다).
+ * → {today, cursor, total, done, updated, attempted, errors}
+ */
+export async function rotateFundamentals(env, now = new Date(), m = null) {
+  const own = !m;
+  m ||= meter(env);
   try {
-    return await weekly(env, now, m);
+    return await rotate(env, now, m);
   } finally {
-    m.restore();
+    if (own) m.restore();
   }
 }
 
-async function weekly(env, now, m) {
+async function rotate(env, now, m) {
   const all = await trackedEquities(env);
-  const cursorRow = await env.DB.prepare("SELECT value FROM meta WHERE key = 'cron:weekly:cursor'").first();
-  const start = all.length ? Number(cursorRow?.value || 0) % all.length : 0;
-  const picked = all.length <= MAX_PER_RUN ? all : Array.from({ length: MAX_PER_RUN }, (_, i) => all[(start + i) % all.length]);
-  let dartLeft = DART_PER_RUN;
-  const settled = [];
-  // DART 보강 대상을 한 종목으로 제한하고, 나머지 소스 호출은 순차 실행해 외부 서버에 버스트를 만들지 않는다.
-  let processed = 0;
-  for (const sec of picked) {
-    const withDart = Boolean(dartLeft && env.DART_API_KEY && sec.dart_corp_code);
-    const reserve = picked.some((s) => s.market === "US") ? SESSION_RESERVE : 0;
-    if (fetchCost(sec, withDart) + reserve > m.left()) break; // 남은 종목은 다음 주에 이어서
-    if (withDart) dartLeft--;
-    try {
-      settled.push({ status: "fulfilled", value: await refreshFundamentals(env, sec, { withDart, dartCount: WEEKLY_DART_REPORTS, now }) });
-    } catch (reason) { settled.push({ status: "rejected", reason, sec }); }
-    processed++;
-  }
+  const today = todayKst(now);
+  const row = await env.DB.prepare("SELECT value FROM meta WHERE key = 'rot:fund'").first();
+  let state = {};
+  try { state = row ? JSON.parse(row.value) : {}; } catch { state = {}; }
+  if (state.day !== today) state = { day: today, cursor: 0, updated: 0, errors: [] };
+  if (state.cursor >= all.length) return { today, cursor: state.cursor, total: all.length, done: true, updated: 0, attempted: 0, errors: [] };
+
+  const dow = new Date(today + "T00:00:00Z").getUTCDay();
   const errors = [];
+  let attempted = 0;
   let updated = 0;
-  settled.forEach((r) => {
-    if (r.status === "fulfilled") { updated++; errors.push(...r.value.errors.map((e) => all.find((s) => s.id === r.value.security_id)?.ysym + ": " + e)); }
-    else errors.push(r.sec.ysym + ": " + String(r.reason?.message || r.reason));
-  });
-  const next = all.length ? (start + processed) % all.length : 0;
-  const report = { at: nowIso(now), updated, attempted: processed, total: all.length, subrequests: m.fetches, d1_calls: m.d1, errors };
+  // 외부 서버에 버스트를 만들지 않게 순서대로
+  while (state.cursor < all.length) {
+    const sec = all[state.cursor];
+    const hasDart = Boolean(env.DART_API_KEY && sec.dart_corp_code);
+    const withDart = hasDart && sec.id % 7 === dow;
+    const reserve = sec.market === "US" ? SESSION_RESERVE : 0;
+    // 남은 종목은 다음 틱에. D1은 종목당 문장 5개 안팎(재무·추정·실적일 2·통화)
+    if (fetchCost(sec, withDart, hasDart) + reserve > m.fetchLeft() || m.d1Left() < 8) break;
+    try {
+      const r = await refreshFundamentals(env, sec, { withDart, dartCount: DART_REPORTS, now });
+      updated++;
+      errors.push(...r.errors.map((e) => sec.ysym + ": " + e));
+    } catch (e) {
+      errors.push(sec.ysym + ": " + String(e?.message || e));
+    }
+    attempted++;
+    state.cursor++;
+  }
+  if (!attempted) return { today, cursor: state.cursor, total: all.length, done: false, updated: 0, attempted: 0, errors: [] };
+
+  state.updated = (state.updated || 0) + updated;
+  state.errors = [...(state.errors || []), ...errors].slice(-30);
+  const report = {
+    at: nowIso(now), day: today, cursor: state.cursor, total: all.length, done: state.cursor >= all.length,
+    updated_today: state.updated, this_run: attempted, subrequests: m.fetches, d1_calls: m.d1, errors: state.errors,
+  };
   await env.DB.batch([
     env.DB.prepare(
-      "INSERT INTO meta (key,value,updated_at) VALUES ('cron:weekly',?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at"
-    ).bind(JSON.stringify(report), report.at),
+      "INSERT INTO meta (key,value,updated_at) VALUES ('rot:fund',?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at"
+    ).bind(JSON.stringify(state), report.at),
     env.DB.prepare(
-      "INSERT INTO meta (key,value,updated_at) VALUES ('cron:weekly:cursor',?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at"
-    ).bind(String(next), report.at),
+      "INSERT INTO meta (key,value,updated_at) VALUES ('cron:fund',?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at"
+    ).bind(JSON.stringify(report), report.at),
   ]);
-  return report;
+  return { today, cursor: state.cursor, total: all.length, done: report.done, updated, attempted, errors };
 }

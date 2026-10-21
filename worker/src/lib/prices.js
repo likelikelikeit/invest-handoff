@@ -1,6 +1,27 @@
 // 일봉 저장·보유 스냅샷. D1 무료 플랜은 호출 1번에 쿼리 50개(batch 안의 문장도 각각 셈)라
 // 종목 하나의 이력 전체를 JSON 파라미터 하나로 넘겨 json_each로 한 쿼리에 넣는다.
 
+const CHANGED = ["open", "high", "low", "close", "volume", "adj_close"]
+  .map((c) => "prices." + c + " IS NOT excluded." + c).join(" OR ");
+
+/**
+ * 여러 종목의 오늘 봉을 한 문장으로 (장중 5분 크론). bars = [{security_id, date, open, high, low, close, volume}]
+ * 종목 수와 상관없이 D1 문장 1개. adj_close는 처음 넣을 때 close로 두고, 이후 일봉 이력이 정확한 값으로 고친다.
+ */
+export function upsertBarsStmt(env, bars) {
+  const packed = JSON.stringify(bars.map((b) => [b.security_id, b.date, b.open, b.high, b.low, b.close, b.volume]));
+  return env.DB.prepare(
+    "INSERT INTO prices (security_id, date, open, high, low, close, volume, adj_close) " +
+    "SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]'), json_extract(value, '$[3]'), " +
+    "json_extract(value, '$[4]'), json_extract(value, '$[5]'), json_extract(value, '$[6]'), json_extract(value, '$[5]') " +
+    "FROM json_each(?1) WHERE true " +
+    "ON CONFLICT(security_id, date) DO UPDATE SET open = excluded.open, high = excluded.high, low = excluded.low, " +
+    "close = excluded.close, volume = excluded.volume " +
+    "WHERE prices.open IS NOT excluded.open OR prices.high IS NOT excluded.high OR prices.low IS NOT excluded.low " +
+    "OR prices.close IS NOT excluded.close OR prices.volume IS NOT excluded.volume"
+  ).bind(packed);
+}
+
 /** rows(parseChart 결과) → prices upsert 문 하나 */
 export function upsertPricesStmt(env, securityId, rows) {
   const packed = JSON.stringify(rows.map((r) => [r.date, r.open, r.high, r.low, r.close, r.volume, r.adj_close]));
@@ -10,7 +31,9 @@ export function upsertPricesStmt(env, securityId, rows) {
     "json_extract(value, '$[3]'), json_extract(value, '$[4]'), json_extract(value, '$[5]'), json_extract(value, '$[6]') " +
     "FROM json_each(?2) WHERE true " +
     "ON CONFLICT(security_id, date) DO UPDATE SET open = excluded.open, high = excluded.high, low = excluded.low, " +
-    "close = excluded.close, volume = excluded.volume, adj_close = excluded.adj_close"
+    "close = excluded.close, volume = excluded.volume, adj_close = excluded.adj_close " +
+    // 같은 값이면 쓰지 않는다(D1 쓰기 한도). 5분 크론이 같은 봉을 계속 받아도 바뀐 것만 쓴다.
+    "WHERE " + CHANGED
   ).bind(securityId, packed);
 }
 
@@ -18,7 +41,8 @@ export function upsertPricesStmt(env, securityId, rows) {
 export async function trackedSecurities(env) {
   const { results } = await env.DB.prepare(
     "SELECT s.id, s.ysym, s.market, s.currency, s.asset_class, " +
-    "(SELECT COUNT(*) FROM prices p WHERE p.security_id = s.id) AS n " +
+    "(SELECT COUNT(*) FROM prices p WHERE p.security_id = s.id) AS n, " +
+    "(SELECT MAX(date) FROM prices p WHERE p.security_id = s.id) AS last " +
     "FROM securities s WHERE s.archived_at IS NULL AND (s.asset_class IN ('index', 'fx') " +
     "OR s.id IN (SELECT security_id FROM positions) OR s.id IN (SELECT security_id FROM watchlist)) ORDER BY s.id"
   ).all();

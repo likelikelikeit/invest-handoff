@@ -1,23 +1,13 @@
-// 매일 23:30 UTC (KST 08:30): 거시 시계열(FRED·ECOS) + 미국 보유·관심 종목 다음 실적일 (SPEC §5.7, §5.8).
-// SPEC §7.3은 거시(23:30)와 어닝일(00:00)을 나눴지만, 무료 플랜 크론 트리거가 계정당 5개라 하나로 합쳤다.
-// 외부 요청: FRED 5 + ECOS 1 + 야후 실적일 종목 수(최대 15) + 야후 세션 2 ≈ 23개.
-// D1 쿼리: 시리즈 목록 1 + 거시 6 + 실적일 종목당 2(지우기·넣기) × 15 + 세션·meta 몇 개 ≈ 42개 (한도 50).
+// 매일 23:30 UTC (KST 08:30): 거시 시계열(FRED·ECOS) (SPEC §5.8). 5분 틱(cron/tick.js)이 하루 한 번 부른다.
+// 실적일은 2026-10-22부터 여기서 받지 않는다: 매일 도는 재무 순환(refreshFundamentals)이 야후 calendarEvents에서
+// 같이 받는다(종목이 많아져도 순환이 나눠서 처리한다).
+// 외부 요청: FRED 5 + ECOS 1. D1: 시리즈 목록 1 + 거시 6 + meta 1.
 // 쓰기를 줄이려고 값이 바뀐 행만 갱신한다(upsert WHERE value <>). 최근 60일만 받는다.
 
 import { fredSeries } from "../sources/fred.js";
 import { ecosSeries } from "../sources/ecos.js";
-import { yahooEarningsDate } from "../sources/yahoo.js";
 import { upsertMacroStmt } from "../lib/macro.js";
-import { replaceEarningsStmts } from "../lib/fundamentals.js";
 import { nowIso } from "../lib/time.js";
-
-export const CRON_MISC = "30 23 * * *";
-const MAX_EARNINGS = 15;
-
-/** ETF처럼 실적 일정 자체가 없는 심볼은 Yahoo quoteSummary가 404를 준다. 크론 오류로 세지 않는다. */
-export function isEarningsUnavailable(error) {
-  return error?.status === 404 || /(?:^|\D)404(?:\D|$)|not found/i.test(String(error?.message || error));
-}
 
 /** 백필이면 과거 전체(기준금리 경로 그래프용), 아니면 최근 60일 */
 function startDate(now, backfill) {
@@ -45,27 +35,8 @@ export async function runMisc(env, now = new Date(), { backfill = false } = {}) 
     } else errors.push(id + ": " + String(r.reason?.message || r.reason));
   });
 
-  // 다음 실적일: 미국 보유·관심 equity (국내는 깨끗한 소스가 없어 수동, SPEC §5.7)
-  const { results: us } = await env.DB.prepare(
-    "SELECT id, ysym FROM securities WHERE archived_at IS NULL AND market = 'US' AND asset_class = 'equity' " +
-    "AND (id IN (SELECT security_id FROM positions) OR id IN (SELECT security_id FROM watchlist)) ORDER BY id LIMIT ?1"
-  ).bind(MAX_EARNINGS).all();
-  let earnings = 0;
-  // 야후에 버스트를 만들지 않게 순서대로
-  for (const s of us) {
-    try {
-      const d = await yahooEarningsDate(env, s.ysym, now);
-      if (d && d >= end) {
-        stmts.push(...replaceEarningsStmts(env, s.id, d, nowIso(now), end));
-        earnings++;
-      }
-    } catch (e) {
-      if (!isEarningsUnavailable(e)) errors.push(s.ysym + ": " + String(e.message || e));
-    }
-  }
-
   if (stmts.length) await env.DB.batch(stmts);
-  const report = { at: nowIso(now), macro, earnings, errors };
+  const report = { at: nowIso(now), macro, errors };
   await env.DB.prepare(
     "INSERT INTO meta (key, value, updated_at) VALUES ('cron:misc', ?1, ?2) " +
     "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"

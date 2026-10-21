@@ -18,7 +18,7 @@ ALLOW_ORIGINS = "https://likelikelikeit.github.io,http://localhost:5173,http://1
 IMPORT_LLM_PROVIDER = "anthropic"
 # IMPORT_LLM_MODEL = ""   # 비우면 공급자 기본 모델
 
-# 크론 (SPEC §7.3, UTC 고정). 문자열은 src/cron/daily.js의 CRON_KR/CRON_US와 같아야 한다.
-# 30 23 * * * = 거시(FRED·ECOS) + 다음 실적일. SPEC은 두 개로 나눴지만 무료 플랜 트리거가 계정당 5개라 합쳤다(M7).
+# 크론 (SPEC §7.3, UTC 고정). 5분 틱 하나가 시각을 보고 시세·마감·거시·재무 순환을 고른다(src/cron/tick.js).
+# 문자열은 CRON_TICK과 같아야 한다. 무료 플랜 트리거는 계정당 5개라 하나만 쓴다.
 [triggers]
-crons = ["0 7 * * MON-FRI", "0 22 * * MON-FRI", "0 23 * * SUN", "30 23 * * *"]
+crons = ["*/5 * * * *"]

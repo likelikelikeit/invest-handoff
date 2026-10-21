@@ -4,6 +4,7 @@ import { json, HttpError, readJson } from "../lib/http.js";
 import { nowIso } from "../lib/time.js";
 import { upsertMacroStmt, dotsId, LONG_RUN_DATE } from "../lib/macro.js";
 import { runMisc } from "../cron/misc.js";
+import { rotateFundamentals } from "../cron/weekly.js";
 
 const KINDS = ["earnings", "macro", "corporate", "custom"];
 const isDate = (s) => /^\d{4}-\d\d-\d\d$/.test(String(s || ""));
@@ -104,8 +105,17 @@ export async function saveDots(request, env, headers) {
   return json({ ok: true, series_id: id, points: rows.length }, 200, headers);
 }
 
-// POST /macro/refresh?backfill=1 — 거시·실적일 즉시 갱신 (키를 막 넣었을 때 과거 이력까지)
+// POST /macro/refresh?backfill=1 — 거시 즉시 갱신 (키를 막 넣었을 때 과거 이력까지) + 재무·실적일 순환 한 걸음.
+// 실적일은 순환이 받는다(cron/weekly.js). 이 요청 하나의 예산만큼만 진행하고, 나머지는 5분 틱이 이어서 한다.
 export async function refreshMacro(request, env, headers, _p, url) {
-  const report = await runMisc(env, new Date(), { backfill: url.searchParams.get("backfill") === "1" });
-  return json({ ok: true, report }, 200, headers);
+  const now = new Date();
+  const report = await runMisc(env, now, { backfill: url.searchParams.get("backfill") === "1" });
+  let fundamentals = null;
+  try {
+    const r = await rotateFundamentals(env, now);
+    fundamentals = { done: r.cursor, total: r.total };
+  } catch (e) {
+    report.errors.push("재무 순환: " + String(e?.message || e));
+  }
+  return json({ ok: true, report: { ...report, fundamentals } }, 200, headers);
 }

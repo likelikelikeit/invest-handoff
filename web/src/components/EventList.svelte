@@ -15,6 +15,7 @@
         <span class="t">
           <i class="k {e.kind}">{KIND_LABEL[e.kind] || e.kind}</i>
           {#if e.security_id}<a href={"#/security/" + e.security_id}>{eventTitle(e)}</a>{:else}{eventTitle(e)}{/if}
+          {#if e.kind === "earnings" && e.confirmed === 0}<em class="est">예상</em>{/if}
         </span>
         {#if e.detail?.local}<span class="sub num">현지 {e.detail.local}</span>{/if}
       </span>
@@ -41,6 +42,7 @@
   .k.earnings{background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--accent)}
   .k.macro{background:color-mix(in srgb,var(--orange) 13%,transparent);color:var(--orange)}
   .dd{font-size:12.5px;color:var(--sub2);flex:none}
+  .est{font-style:normal;font-size:11px;color:var(--sub2);flex:none}
   .del{width:36px;height:36px;border-radius:8px;color:var(--sub2);font-size:17px}
   .del:hover{background:var(--bg2);color:var(--red)}
 </style>

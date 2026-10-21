@@ -146,11 +146,53 @@ async function yahooAuthed(env, path, retry = true) {
     headers: { "User-Agent": UA, Accept: "application/json", Cookie: s.cookie },
   });
   if ((res.status === 401 || res.status === 403) && retry) return yahooAuthed(env, path, false);
-  if (!res.ok) throw new Error("야후 재무가 " + res.status + " 응답");
+  if (!res.ok) throw new Error("야후(" + path.split("?")[0].split("/").slice(0, 4).join("/") + ")가 " + res.status + " 응답");
   const data = await res.json();
   if (data.quoteSummary && data.quoteSummary.error) throw new Error("야후 재무: " + data.quoteSummary.error.description);
   if (data.timeseries && data.timeseries.error) throw new Error("야후 재무: " + data.timeseries.error.description);
   return data;
+}
+
+// ── 여러 종목 한 번에 (v7 quote, crumb 필요) ─────────────────
+// 종목마다 chart를 부르면 종목 수만큼 서브요청이 들어 무료 플랜 50에 막힌다. 한 요청에 최대 50종목.
+export const QUOTE_BATCH = 50;
+
+/** v7 quote 응답 한 줄 → 앱 시세 모양 + 오늘 봉. 거래가 없으면(장 전) bar는 null. 순수 함수. */
+export function parseQuoteRow(q) {
+  if (!q || typeof q.regularMarketPrice !== "number") return null;
+  const t = typeof q.regularMarketTime === "number" ? q.regularMarketTime : null;
+  const off = typeof q.gmtOffSetMilliseconds === "number" ? q.gmtOffSetMilliseconds : 0;
+  const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const date = t != null ? new Date(t * 1000 + off).toISOString().slice(0, 10) : null;
+  const open = num(q.regularMarketOpen);
+  return {
+    symbol: q.symbol,
+    price: q.regularMarketPrice,
+    prevClose: num(q.regularMarketPreviousClose),
+    currency: q.currency || null,
+    exchange: q.fullExchangeName || q.exchange || null,
+    marketState: q.marketState || null,
+    time: t != null ? new Date(t * 1000).toISOString() : null,
+    // 그날(거래소 현지 날짜) 봉. 시가가 없으면 아직 거래 전이라 봉을 만들지 않는다.
+    bar: date && open != null ? {
+      date, open, high: num(q.regularMarketDayHigh), low: num(q.regularMarketDayLow),
+      close: q.regularMarketPrice, volume: num(q.regularMarketVolume),
+    } : null,
+  };
+}
+
+/** 여러 심볼 시세. → Map(symbol → parseQuoteRow 결과). 못 받은 심볼은 빠진다. */
+export async function quoteBatch(env, symbols) {
+  const out = new Map();
+  for (let i = 0; i < symbols.length; i += QUOTE_BATCH) {
+    const chunk = symbols.slice(i, i + QUOTE_BATCH);
+    const data = await yahooAuthed(env, "/v7/finance/quote?symbols=" + encodeURIComponent(chunk.join(",")));
+    for (const q of data?.quoteResponse?.result || []) {
+      const row = parseQuoteRow(q);
+      if (row) out.set(row.symbol, row);
+    }
+  }
+  return out;
 }
 
 const SUMMARY_MODULES = [
@@ -184,9 +226,13 @@ export function parseYahooSummary(data, asOf) {
       raw: JSON.stringify(t),
     });
   }
-  const ed = x.calendarEvents?.earnings?.earningsDate?.[0];
+  const ce = x.calendarEvents?.earnings;
+  const ed = ce?.earningsDate?.[0];
   const earningsDate = ed?.fmt || (typeof ed?.raw === "number" ? new Date(ed.raw * 1000).toISOString().slice(0, 10) : null);
-  return { estimates: estimates.map((e) => ({ ...e, as_of: asOf, source: "yahoo" })), earningsDate, financialCurrency };
+  // 야후가 '추정'이라고 표시한 날짜면 예상, 아니라고 하면 확정, 표시가 없으면 모름(null)
+  const flag = ce?.isEarningsDateEstimate;
+  const earningsConfirmed = flag === true ? 0 : flag === false ? 1 : null;
+  return { estimates: estimates.map((e) => ({ ...e, as_of: asOf, source: "yahoo" })), earningsDate, earningsConfirmed, financialCurrency };
 }
 
 const SERIES_TYPES = [
@@ -367,7 +413,8 @@ export async function yahooFinancialFxHistory(from, to) {
 /** 다음 실적 발표일만 (일일 크론용, calendarEvents 모듈 하나라 가볍다). 없으면 null. */
 export async function yahooEarningsDate(env, symbol, now = new Date()) {
   const data = await yahooAuthed(env, "/v10/finance/quoteSummary/" + encodeURIComponent(symbol) + "?modules=calendarEvents");
-  return parseYahooSummary(data, now.toISOString().slice(0, 10)).earningsDate;
+  const s = parseYahooSummary(data, now.toISOString().slice(0, 10));
+  return s.earningsDate ? { date: s.earningsDate, confirmed: s.earningsConfirmed } : null;
 }
 
 /** 미국 종목의 분기 재무·컨센서스·실적일을 한 번에 가져온다. */
@@ -406,6 +453,7 @@ export async function yahooFundamentals(env, symbol, now = new Date(), { listing
     financials,
     estimates,
     earningsDate: s.earningsDate,
+    earningsConfirmed: s.earningsConfirmed,
     financialCurrency: sourceCurrency,
     financialToListingRate: fx?.latestRate ?? null,
     financialRateAsOf: fx?.rateAsOf ?? null,

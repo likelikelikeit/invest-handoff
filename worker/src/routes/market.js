@@ -2,10 +2,12 @@
 
 import { json, HttpError } from "../lib/http.js";
 import { nowIso, todayKst } from "../lib/time.js";
-import { quote, search, FX_SYMBOL } from "../sources/yahoo.js";
+import { quote, quoteBatch, search, FX_SYMBOL } from "../sources/yahoo.js";
 import { importProvider, parseRows } from "../sources/llm.js";
 
-const MAX_SYMBOLS = 40; // 서브요청 50 제한 안쪽
+// 묶음 시세(50종목/요청)라 서브요청은 몇 개 안 든다. 묶음이 실패하면 종목별로 받되 그건 40개까지.
+const MAX_SYMBOLS = 200;
+const FALLBACK_SYMBOLS = 40;
 const IMPORT_DAILY_LIMIT = 30; // SPEC §7.2 [제안]
 
 export async function handleQuotes(url, env, headers) {
@@ -21,23 +23,35 @@ export async function handleQuotes(url, env, headers) {
   // 환율은 항상 받는다. 명시적으로 요청했으면(시장 띠) quotes에도 넣는다.
   const askedFx = symbols.includes(FX_SYMBOL);
   const wanted = askedFx ? symbols : symbols.concat([FX_SYMBOL]);
-  const settled = await Promise.allSettled(wanted.map(quote));
-  const quotes = {};
+  const got = new Map();
   const errors = [];
+  try {
+    for (const [sym, q] of await quoteBatch(env, wanted)) {
+      const { bar, ...rest } = q; // 앱에는 봉이 필요 없다
+      void bar;
+      got.set(sym, rest);
+    }
+  } catch (e) {
+    errors.push("묶음 시세 실패, 종목별로 받음: " + String(e?.message || e));
+  }
+  // 묶음에서 빠진 종목(심볼 오타·묶음 실패)은 종목별로 다시 본다
+  const rest = wanted.filter((s) => !got.has(s)).slice(0, FALLBACK_SYMBOLS);
+  const settled = await Promise.allSettled(rest.map(quote));
+  settled.forEach((r, i) => {
+    if (r.status === "fulfilled") got.set(rest[i], r.value);
+    else errors.push(String(r.reason && r.reason.message ? r.reason.message : r.reason));
+  });
+
+  const quotes = {};
   let fx = null;
   let fxTime = null;
-
-  settled.forEach((r, i) => {
-    if (r.status === "fulfilled") {
-      if (wanted[i] === FX_SYMBOL) {
-        fx = r.value.price;
-        fxTime = r.value.time;
-        if (askedFx) quotes[FX_SYMBOL] = r.value;
-      } else quotes[wanted[i]] = r.value;
-    } else {
-      errors.push(String(r.reason && r.reason.message ? r.reason.message : r.reason));
-    }
-  });
+  for (const [sym, q] of got) {
+    if (sym === FX_SYMBOL) {
+      fx = q.price;
+      fxTime = q.time;
+      if (askedFx) quotes[FX_SYMBOL] = q;
+    } else quotes[sym] = q;
+  }
 
   return json({ ok: Object.keys(quotes).length > 0, at: new Date().toISOString(),
                 source: "yahoo(delayed)", fx: { USDKRW: fx, time: fxTime }, quotes, errors }, 200, headers);

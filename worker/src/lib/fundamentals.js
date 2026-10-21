@@ -63,21 +63,30 @@ export function upsertEstimatesStmt(env, securityId, rows) {
  * 다음 실적일 교체: 같은 종목의 오늘 이후 야후 어닝일 중 새 날짜가 아닌 것은 지우고 새 날짜를 넣는다.
  * (발표일이 바뀌면 옛 날짜가 남지 않게. 지난 일정은 기록으로 둔다.) → 문 2개
  */
-export function replaceEarningsStmts(env, securityId, date, createdAt, today) {
+/**
+ * 다음 실적일 하나로 맞춘다: 같은 출처의 앞으로 일정 중 다른 날짜는 지우고 이 날짜를 넣는다.
+ * confirmed: 1 확정 · 0 예상 · null 모름. detail은 근거(JSON, 선택).
+ */
+export function replaceEarningsStmts(env, securityId, date, createdAt, today, { confirmed = null, source = "yahoo", detail = null } = {}) {
   return [
     env.DB.prepare(
-      "DELETE FROM events WHERE security_id = ?1 AND kind = 'earnings' AND source = 'yahoo' AND date >= ?2 AND date <> ?3"
-    ).bind(securityId, today, date),
-    upsertEarningsStmt(env, securityId, date, createdAt),
+      "DELETE FROM events WHERE security_id = ?1 AND kind = 'earnings' AND source = ?4 AND date >= ?2 AND date <> ?3"
+    ).bind(securityId, today, date, source),
+    upsertEarningsStmt(env, securityId, date, createdAt, { confirmed, source, detail }),
   ];
 }
 
-export function upsertEarningsStmt(env, securityId, date, createdAt) {
+export function upsertEarningsStmt(env, securityId, date, createdAt, { confirmed = null, source = "yahoo", detail = null } = {}) {
+  const title = confirmed === 1 ? "실적 발표" : confirmed === 0 ? "실적 발표 (예상)" : "실적 발표 예정";
+  // 바뀐 게 없으면 쓰지 않는다 (매일 도는 순환이 같은 날짜를 계속 넣는다).
+  // 예상 날짜는, 다른 출처(맥 미니의 IR 공시 확인 등)가 이미 확정 날짜를 넣어 두었으면 넣지 않는다.
   return env.DB.prepare(
-    "INSERT INTO events (date, kind, security_id, title, source, detail, created_at) " +
-    "VALUES (?1, 'earnings', ?2, '실적 발표 예정', 'yahoo', NULL, ?3) " +
-    "ON CONFLICT(security_id, kind, date, source) DO UPDATE SET title = excluded.title"
-  ).bind(date, securityId, createdAt);
+    "INSERT INTO events (date, kind, security_id, title, source, detail, created_at, confirmed) " +
+    "SELECT ?1, 'earnings', ?2, ?3, ?4, ?5, ?6, ?7 WHERE NOT (?7 IS 0 AND EXISTS (SELECT 1 FROM events o " +
+    "WHERE o.security_id = ?2 AND o.kind = 'earnings' AND o.source <> ?4 AND o.confirmed = 1 AND o.date >= ?8)) " +
+    "ON CONFLICT(security_id, kind, date, source) DO UPDATE SET title = excluded.title, confirmed = excluded.confirmed, detail = excluded.detail " +
+    "WHERE events.title IS NOT excluded.title OR events.confirmed IS NOT excluded.confirmed OR events.detail IS NOT excluded.detail"
+  ).bind(date, securityId, title, source, detail ? JSON.stringify(detail) : null, createdAt, confirmed, createdAt.slice(0, 10));
 }
 
 /** 재무 갱신 대상: 보유+관심 equity, 숨김 제외. */
