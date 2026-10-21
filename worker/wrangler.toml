@@ -21,4 +21,4 @@ IMPORT_LLM_PROVIDER = "anthropic"
 # 크론 (SPEC §7.3, UTC 고정). 문자열은 src/cron/daily.js의 CRON_KR/CRON_US와 같아야 한다.
 # 30 23 * * * = 거시(FRED·ECOS) + 다음 실적일. SPEC은 두 개로 나눴지만 무료 플랜 트리거가 계정당 5개라 합쳤다(M7).
 [triggers]
-crons = ["0 7 * * 1-5", "0 22 * * 1-5", "0 23 * * SUN", "30 23 * * *"]
+crons = ["0 7 * * MON-FRI", "0 22 * * MON-FRI", "0 23 * * SUN", "30 23 * * *"]

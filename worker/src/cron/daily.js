@@ -1,6 +1,6 @@
 // 일일 시세 크론 (SPEC §7.3, UTC 고정 — 서머타임 계산 없음).
-//   0 7  * * 1-5  (KST 16:00)      국내 종목·지수·환율, 국내 보유 스냅샷
-//   0 22 * * 1-5  (KST 익일 07:00)  미국 종목·지수·환율, 전체 보유 스냅샷(하루치 확정)
+//   0 7  * * MON-FRI  (KST 16:00)      국내 종목·지수·환율, 국내 보유 스냅샷
+//   0 22 * * MON-FRI  (KST 익일 07:00)  미국 종목·지수·환율, 전체 보유 스냅샷(하루치 확정)
 // 휴장일에도 돌지만 같은 값을 UPSERT할 뿐이라 무해하다.
 //
 // 한도: 서브요청 50·D1 쿼리 50/호출. 최근 5일 봉만 받고, 종목 하나당 fetch 1 + 쿼리 1.
@@ -12,9 +12,11 @@ import { nowIso } from "../lib/time.js";
 import { refreshFundamentals } from "./weekly.js";
 import { fillCallPricesStmts } from "../routes/tech.js";
 import { evaluateViews } from "../lib/view-evaluation.js";
+import { meter } from "../lib/budget.js";
 
-export const CRON_KR = "0 7 * * 1-5";
-export const CRON_US = "0 22 * * 1-5";
+// 요일은 이름으로 쓴다. Cloudflare 크론은 1=일요일이라 "1-5"가 일~목이 돼 금요일 마감을 놓쳤다(2026-10-22 수정).
+export const CRON_KR = "0 7 * * MON-FRI";
+export const CRON_US = "0 22 * * MON-FRI";
 
 const MAX_DAILY = 35; // 종목 수가 늘면 여기서 잘린다. 넘으면 meta에 남겨 알 수 있게.
 const BACKFILL_PER_RUN = 2;
@@ -56,6 +58,15 @@ async function refresh(env, secs, range) {
 
 /** which: 'kr' | 'us'. now는 테스트용. */
 export async function runDaily(env, which, now = new Date()) {
+  const m = meter(env);
+  try {
+    return await daily(env, which, now, m);
+  } finally {
+    m.restore();
+  }
+}
+
+async function daily(env, which, now, m) {
   const all = await trackedSecurities(env);
   const isFx = (s) => s.ysym === "KRW=X";
   const pick = all.filter((s) => isFx(s) || (which === "kr" ? s.market === "KR" : s.market === "US"));
@@ -79,7 +90,8 @@ export async function runDaily(env, which, now = new Date()) {
   let dart = null;
   const dartErrors = [];
   // 국내 크론에서만 수행한다. 시세 최대 37회 + DART 4회로 외부 요청 50회 안에 남는다.
-  const target = which === "kr" ? await dartBackfillTarget(env, now) : null;
+  // 예산이 모자라면 DART는 다음 실행으로 미룬다(시도 기록을 남기지 않으니 내일 다시 고른다).
+  const target = which === "kr" && m.left() >= DART_REPORTS_PER_RUN ? await dartBackfillTarget(env, now) : null;
   if (target) {
     try {
       const r = await refreshFundamentals(env, target, {
@@ -106,7 +118,7 @@ export async function runDaily(env, which, now = new Date()) {
 
   const report = {
     at: nowIso(now), which, date,
-    updated: a.ok, backfilled: b.ok, snapshots: snap.meta.changes, dart,
+    updated: a.ok, backfilled: b.ok, snapshots: snap.meta.changes, dart, subrequests: m.fetches, d1_calls: m.d1,
     tech_filled: filled.reduce((s, r) => s + (r.meta?.changes || 0), 0), views_evaluated: viewsEvaluated,
     errors: a.errors.concat(b.errors, dartErrors),
     truncated: truncated ? daily.length - MAX_DAILY : 0,

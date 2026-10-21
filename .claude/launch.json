@@ -19,7 +19,9 @@
         "run",
         "dev",
         "-w",
-        "worker"
+        "worker",
+        "--",
+        "--test-scheduled"
       ],
       "port": 8787
     }
