@@ -6,7 +6,7 @@ import { nowIso } from "../lib/time.js";
 const MARKETS = ["KR", "US"];
 const CURRENCIES = ["KRW", "USD"];
 const BANDS = ["per", "pbr", "ev_ebitda", "psr"];
-const ASSET_CLASSES = ["equity", "bond", "cash", "index", "fx", "other"];
+const ASSET_CLASSES = ["equity", "bond", "cash", "index", "fx", "commodity", "other"];
 
 // 쓰기 가능한 컬럼과 검증. band_multiples는 객체로 받아 JSON 문자열로 저장한다.
 const FIELDS = {

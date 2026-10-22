@@ -46,7 +46,7 @@ export async function trackedSecurities(env, { light = false } = {}) {
     "SELECT s.id, s.ysym, s.market, s.currency, s.asset_class" +
     (light ? " " : ", (SELECT COUNT(*) FROM (SELECT 1 FROM prices p WHERE p.security_id = s.id LIMIT " + BACKFILL_MIN_ROWS + ")) AS n, " +
       "(SELECT MAX(date) FROM prices p WHERE p.security_id = s.id) AS last ") +
-    "FROM securities s WHERE s.archived_at IS NULL AND (s.asset_class IN ('index', 'fx') " +
+    "FROM securities s WHERE s.archived_at IS NULL AND (s.asset_class IN ('index', 'fx', 'commodity') " +
     "OR s.id IN (SELECT security_id FROM positions) OR s.id IN (SELECT security_id FROM watchlist)) ORDER BY s.id"
   ).all();
   return results;

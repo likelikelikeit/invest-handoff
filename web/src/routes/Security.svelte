@@ -30,7 +30,7 @@
   let fundamentals = $state(null);
   let fundErr = $state("");
   let valuationMetric = $state("per");
-  const ASSET_LABELS = { equity: "주식", bond: "채권", cash: "현금", index: "지수", fx: "환율", other: "기타" };
+  const ASSET_LABELS = { equity: "주식", bond: "채권", cash: "현금", index: "지수", fx: "환율", commodity: "원자재", other: "기타" };
   const VALUATION_LABELS = { per: "PER", pbr: "PBR", ev_ebitda: "EV/EBITDA", psr: "PSR" };
 
   const pos = $derived(data.positions.find((p) => p.security_id === id));

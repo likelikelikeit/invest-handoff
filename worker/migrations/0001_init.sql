@@ -13,7 +13,7 @@ CREATE TABLE securities (
   market         TEXT NOT NULL,              -- KR | US
   currency       TEXT NOT NULL,              -- KRW | USD
   sector         TEXT,
-  asset_class    TEXT NOT NULL DEFAULT 'equity', -- equity | bond | cash | index | fx | other
+  asset_class    TEXT NOT NULL DEFAULT 'equity', -- equity | bond | cash | index | fx | commodity(0018) | other
   logo_url       TEXT,
   brand_color    TEXT,
   band_default   TEXT DEFAULT 'per',         -- per | pbr | ev_ebitda | psr

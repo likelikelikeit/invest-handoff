@@ -71,6 +71,7 @@
   <ul class="menu">
     <li><a class="mlink" href="#/more/calendar"><span class="m1">일정</span><span class="m2">FOMC·금통위·CPI·실적 발표, 직접 추가</span></a></li>
     <li><a class="mlink" href="#/more/macro"><span class="m1">거시</span><span class="m2">한·미 기준금리, 금리 경로, 점도표 입력</span></a></li>
+    <li><a class="mlink" href="#/more/others"><span class="m1">기타 항목</span><span class="m2">금 등 원자재 시세</span></a></li>
     <li><a class="mlink" href="#/more/rules"><span class="m1">기술적 분석 규칙</span><span class="m2">매매 적합도의 과열·침체 기준과 가중치, 버전 이력</span></a></li>
     <li><button onclick={() => (ui.importOpen = true)} disabled={!settings.token}>
       <span class="m1">스크린샷 가져오기</span><span class="m2">증권사 보유 화면 캡처로 보유 갱신</span>

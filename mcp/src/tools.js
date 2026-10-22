@@ -38,7 +38,7 @@ export async function findSecurity(env, q) {
   ).bind(s).all();
   if (!results.length) {
     const all = await env.DB.prepare(
-      "SELECT name, ticker FROM securities WHERE archived_at IS NULL AND asset_class NOT IN ('index','fx') ORDER BY name LIMIT 40"
+      "SELECT name, ticker FROM securities WHERE archived_at IS NULL AND asset_class NOT IN ('index','fx','commodity') ORDER BY name LIMIT 40"
     ).all();
     throw new ToolError(
       "'" + s + "'에 해당하는 종목이 없습니다. 등록된 종목: " + all.results.map((r) => r.name + "(" + r.ticker + ")").join(", ")

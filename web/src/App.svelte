@@ -15,6 +15,7 @@
   import Views from "./routes/Views.svelte";
   import Rules from "./routes/Rules.svelte";
   import Calendar from "./routes/Calendar.svelte";
+  import Others from "./routes/Others.svelte";
   import Macro from "./routes/Macro.svelte";
   import Fab from "./components/Fab.svelte";
   import AddSheet from "./components/AddSheet.svelte";
@@ -72,6 +73,8 @@
       <Calendar />
     {:else if current === "more" && route.parts[1] === "macro"}
       <Macro />
+    {:else if current === "more" && route.parts[1] === "others"}
+      <Others />
     {:else if current === "more"}
       <More />
     {:else}
