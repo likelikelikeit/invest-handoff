@@ -85,6 +85,20 @@ export function recentDartReports(now = new Date(), count = 16) {
   return out.sort((a, b) => b.end.localeCompare(a.end)).slice(0, count);
 }
 
+/**
+ * DART 요청. 리다이렉트를 따라가지 않는다: Worker에서 DART만 외부 요청 10개 안팎에서 "Too many subrequests"로
+ * 죽었는데(2026-10-22 계량 결과), 리다이렉트 한 번 한 번이 서브요청으로 세진다. 따라가지 않고 그 응답을 오류로 남겨
+ * 원인을 보이게 하고, 한 종목 때문에 같은 실행의 예산을 다 태우지 않게 한다.
+ */
+async function dartFetch(u) {
+  const res = await fetch(u, { headers: { Accept: "application/json" }, redirect: "manual" });
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error("DART가 리다이렉트 " + res.status + " → " + String(res.headers.get("location") || "?").replace(/crtfc_key=[^&]+/, "crtfc_key=…"));
+  }
+  if (!res.ok) throw new Error("DART가 " + res.status + " 응답");
+  return res;
+}
+
 async function statement(apiKey, corpCode, report) {
   const u = new URL(API);
   u.searchParams.set("crtfc_key", apiKey);
@@ -92,8 +106,7 @@ async function statement(apiKey, corpCode, report) {
   u.searchParams.set("bsns_year", String(report.year));
   u.searchParams.set("reprt_code", report.code);
   u.searchParams.set("fs_div", "CFS");
-  const res = await fetch(u, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error("DART가 " + res.status + " 응답");
+  const res = await dartFetch(u);
   return parseDartStatement(await res.json(), report.year, report);
 }
 
@@ -146,8 +159,7 @@ export async function dartDisclosures(apiKey, corpCode, from, to) {
   u.searchParams.set("end_de", to.replace(/-/g, ""));
   u.searchParams.set("pblntf_detail_ty", "I002");
   u.searchParams.set("page_count", "100");
-  const res = await fetch(u, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error("DART 목록이 " + res.status + " 응답");
+  const res = await dartFetch(u);
   return parseDisclosureList(await res.json());
 }
 
