@@ -36,7 +36,7 @@ node scripts/backfill.mjs          # 이력이 부족한 추적 종목만 5년�
 SEC_USER_AGENT="이름 이메일" node scripts/sec-history.mjs   # 미국 종목 분기 재무 이력(SEC, 분할 보정). 새 미국 종목을 추가한 뒤 한 번
 ```
 
-크론(UTC `0 7 * * MON-FRI`, `0 22 * * MON-FRI` — Cloudflare는 1=일요일이라 요일은 이름으로 쓴다)이 이후 매일 최근 5일 봉과 보유 스냅샷을 채운다. 미국장 크론은 만기가 지난 투자의견의 적중·실제수익률도 평가한다. 일요일 `0 23 * * SUN`에는 재무·컨센서스를 최대 8종목씩, 매일 `30 23 * * *`에는 거시(FRED·ECOS)와 미국 다음 실적일을 갱신한다(`FRED_API_KEY`, `ECOS_API_KEY` 시크릿 필요). 로컬 시험: `npx wrangler dev --test-scheduled` 후 `curl "http://127.0.0.1:8787/__scheduled?cron=0+22+*+*+MON-FRI"`.
+크론은 5분 틱 하나(`*/5 * * * *`, `src/cron/tick.js`)다. 장중에는 5분마다 오늘 봉(야후 묶음 시세, 바뀐 값만 저장), 장 마감 뒤 하루 한 번 확정·보유 스냅샷·의견 평가, 매일 08:30 KST 거시(FRED·ECOS), 장이 닫힌 시간에는 재무·컨센서스·실적일을 하루 한 바퀴 순환한다(`FRED_API_KEY`, `ECOS_API_KEY`, `DART_API_KEY` 시크릿). 실행 기록은 meta `cron:quotes`·`cron:kr`·`cron:us`·`cron:fund`·`cron:misc`. 로컬 시험: `npx wrangler dev --test-scheduled` 후 `curl "http://127.0.0.1:8787/__scheduled?cron=*/5+*+*+*+*"`.
 
 ## API (전부 `Authorization: Bearer <APP_TOKEN>`, `/health`만 예외)
 

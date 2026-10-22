@@ -38,11 +38,14 @@ export function upsertPricesStmt(env, securityId, rows) {
 }
 
 /** 크론이 시세를 챙기는 종목: 보유 + 관심 + 지수·환율. 숨긴 종목은 뺀다. */
-export async function trackedSecurities(env) {
+// D1 무료 플랜은 읽은 행 수도 하루 500만 행 한도다. 5분 틱이 하루 288번 부르므로 이력 전체를 세지 않는다:
+// n은 BACKFILL_MIN_ROWS까지만 세고(넘으면 충분), last는 기본키(security_id, date)로 한 행만 읽는다.
+// light면 둘 다 빼고 종목 목록만 (장중 시세용).
+export async function trackedSecurities(env, { light = false } = {}) {
   const { results } = await env.DB.prepare(
-    "SELECT s.id, s.ysym, s.market, s.currency, s.asset_class, " +
-    "(SELECT COUNT(*) FROM prices p WHERE p.security_id = s.id) AS n, " +
-    "(SELECT MAX(date) FROM prices p WHERE p.security_id = s.id) AS last " +
+    "SELECT s.id, s.ysym, s.market, s.currency, s.asset_class" +
+    (light ? " " : ", (SELECT COUNT(*) FROM (SELECT 1 FROM prices p WHERE p.security_id = s.id LIMIT " + BACKFILL_MIN_ROWS + ")) AS n, " +
+      "(SELECT MAX(date) FROM prices p WHERE p.security_id = s.id) AS last ") +
     "FROM securities s WHERE s.archived_at IS NULL AND (s.asset_class IN ('index', 'fx') " +
     "OR s.id IN (SELECT security_id FROM positions) OR s.id IN (SELECT security_id FROM watchlist)) ORDER BY s.id"
   ).all();

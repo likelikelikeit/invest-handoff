@@ -6,6 +6,7 @@
 import { yahooFundamentals } from "../sources/yahoo.js";
 import { naverFundamentals } from "../sources/naver.js";
 import { dartFundamentals, dartDisclosures, krEarningsFromDisclosures } from "../sources/dart.js";
+import { kindIrSchedule, krEarningsFromKind } from "../sources/kind.js";
 import { trackedEquities, upsertFinancialsStmt, upsertEstimatesStmt, replaceEarningsStmts } from "../lib/fundamentals.js";
 import { nowIso, todayKst } from "../lib/time.js";
 import { meter } from "../lib/budget.js";
@@ -22,7 +23,8 @@ const SESSION_RESERVE = 3; // 야후 쿠키·crumb 갱신 (12시간 캐시가 �
 
 /** 이 종목을 갱신하는 데 드는 외부 요청 어림값 */
 export function fetchCost(sec, withDart, withDartList = false) {
-  if (sec.market === "KR") return 3 + (withDart ? DART_REPORTS : 0) + (withDartList ? 1 : 0);
+  // 국내: 네이버 3 + KIND IR 1 (+ DART 정기보고서 4) (+ DART 공시 목록 1)
+  if (sec.market === "KR") return 4 + (withDart ? DART_REPORTS : 0) + (withDartList ? 1 : 0);
   const fx = sec.financial_currency && sec.financial_currency !== sec.currency ? 2 : 0;
   return 2 + fx;
 }
@@ -54,7 +56,14 @@ export async function refreshFundamentals(env, secOrId, {
         offset: dartOffset, count: dartCount, batchByYear: dartBatchByYear,
       })]);
     }
-    // 국내 실적 발표일: DART 공정공시 목록 (요청 1번)
+    // 국내 실적 발표일 — 주: KIND IR 일정(확정 일시), 보조: DART 잠정실적 공시(실제 발표 확인·작년 패턴 예상). 각 요청 1번
+    if (withMarketSource && /^\d{6}$/.test(sec.ticker || "")) {
+      sources.push(["kind", async () => {
+        const today = todayKst(now);
+        const e = krEarningsFromKind(await kindIrSchedule(sec.ticker, today, addDaysIso(today, 120)), today);
+        return { financials: [], estimates: [], earnings: e ? { ...e, source: "kind" } : null };
+      }]);
+    }
     if (withMarketSource && env.DART_API_KEY && sec.dart_corp_code) {
       sources.push(["dart-list", async () => {
         const today = todayKst(now);
@@ -68,7 +77,7 @@ export async function refreshFundamentals(env, secOrId, {
   const settled = await Promise.allSettled(sources.map(([, fn]) => fn()));
   const financials = [];
   const estimates = [];
-  let earnings = null; // {date, confirmed, source, detail}
+  const earnings = []; // [{date, time?, confirmed, source, detail}] 출처마다 하나
   let dartProgress = null;
   let yahooMetadata = null;
   const errors = [];
@@ -86,9 +95,9 @@ export async function refreshFundamentals(env, secOrId, {
       });
       financials.push(...rows);
       estimates.push(...(r.value.estimates || []));
-      if (!earnings && r.value.earnings) earnings = r.value.earnings;
-      if (!earnings && r.value.earningsDate) {
-        earnings = { date: r.value.earningsDate, confirmed: r.value.earningsConfirmed ?? null, source: "yahoo", detail: null };
+      if (r.value.earnings) earnings.push(r.value.earnings);
+      if (r.value.earningsDate) {
+        earnings.push({ date: r.value.earningsDate, confirmed: r.value.earningsConfirmed ?? null, source: "yahoo", detail: null });
       }
       if (name === "dart") dartProgress = r.value.progress || null;
       if (name === "yahoo") yahooMetadata = r.value;
@@ -96,7 +105,7 @@ export async function refreshFundamentals(env, secOrId, {
     }
   });
   // DART 배치가 정상 응답했지만 해당 보고서가 없는 경우에도 커서는 전진해야 한다.
-  if (!financials.length && !estimates.length && !earnings && !dartProgress) {
+  if (!financials.length && !estimates.length && !earnings.length && !dartProgress) {
     throw new Error(errors[0] || "재무 데이터를 찾지 못했습니다");
   }
 
@@ -117,8 +126,9 @@ export async function refreshFundamentals(env, secOrId, {
   if (estimates.length) stmts.push(upsertEstimatesStmt(env, sec.id, estimates));
   // 지난 날짜(이미 발표한 분기)는 넣지 않는다
   const today = now.toISOString().slice(0, 10);
-  if (earnings && earnings.date >= today) {
-    stmts.push(...replaceEarningsStmts(env, sec.id, earnings.date, at, today, earnings));
+  // 확정을 먼저 쓴다: 예상 날짜는 근처(±20일)에 다른 출처의 확정이 있으면 넣지 않는다
+  for (const e of [...earnings].sort((a, b) => (b.confirmed ?? -1) - (a.confirmed ?? -1))) {
+    if (e.date >= today) stmts.push(...replaceEarningsStmts(env, sec.id, e.date, at, today, e));
   }
   if (stmts.length) await env.DB.batch(stmts);
   return { security_id: sec.id, financials: financials.length, estimates: estimates.length, earnings, errors, dartProgress };
@@ -157,8 +167,8 @@ async function rotate(env, now, m) {
     const hasDart = Boolean(env.DART_API_KEY && sec.dart_corp_code);
     const withDart = hasDart && sec.id % 7 === dow;
     const reserve = sec.market === "US" ? SESSION_RESERVE : 0;
-    // 남은 종목은 다음 틱에. D1은 종목당 문장 5개 안팎(재무·추정·실적일 2·통화)
-    if (fetchCost(sec, withDart, hasDart) + reserve > m.fetchLeft() || m.d1Left() < 8) break;
+    // 남은 종목은 다음 틱에. D1은 종목당 문장 7개 안팎(재무·추정·실적일 출처마다 2~3·통화)
+    if (fetchCost(sec, withDart, hasDart) + reserve > m.fetchLeft() || m.d1Left() < 10) break;
     try {
       const r = await refreshFundamentals(env, sec, { withDart, dartCount: DART_REPORTS, now });
       updated++;

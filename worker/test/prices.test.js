@@ -66,6 +66,8 @@ describe("D1 쿼리 (실제 SQLite)", () => {
   it("0002가 지수·환율을 등록했다", async () => {
     const r = await env.DB.prepare("SELECT ysym, asset_class FROM securities WHERE asset_class IN ('index','fx') ORDER BY id").all();
     expect(r.results.map((x) => x.ysym)).toEqual(["^KS11", "^GSPC", "KRW=X", "^TNX"]);
+    const withVix = makeDb({ keepVix: true });
+    expect(withVix.raw.prepare("SELECT name, asset_class, market FROM securities WHERE ysym = '^VIX'").get()).toEqual({ name: "VIX", asset_class: "index", market: "US" });
   });
 
   it("json_each upsert: 한 쿼리로 여러 행, 다시 넣으면 갱신", async () => {

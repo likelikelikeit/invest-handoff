@@ -40,9 +40,11 @@ class Stmt {
   }
 }
 
-export function makeDb() {
+export function makeDb({ keepVix = false } = {}) {
   const db = new DatabaseSync(":memory:");
   for (const f of readdirSync(migDir).filter((x) => x.endsWith(".sql")).sort()) db.exec(readFileSync(join(migDir, f), "utf8"));
+  // 테스트들은 "지수 4개 다음 id 5"를 전제로 종목을 넣는다. 0017(VIX)이 그 순서를 밀어내지 않게 기본은 뺀다.
+  if (!keepVix) db.exec("DELETE FROM securities WHERE ysym = '^VIX'");
   return {
     raw: db,
     prepare: (sql) => new Stmt(db, sql),

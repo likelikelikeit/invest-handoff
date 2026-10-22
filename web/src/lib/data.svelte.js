@@ -84,7 +84,7 @@ export async function refreshQuotes(extra = []) {
 }
 
 // 시장 띠 순서 (SPEC §4.2 블록 1)
-const MARKET_ORDER = ["^KS11", "^GSPC", "KRW=X", "^TNX"];
+const MARKET_ORDER = ["^KS11", "^GSPC", "^VIX", "KRW=X", "^TNX"];
 
 export async function load() {
   data.loading = true;

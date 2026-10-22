@@ -19,6 +19,15 @@ vi.mock("../src/sources/naver.js", () => ({
     earningsDate: null,
   }),
 }));
+vi.mock("../src/sources/kind.js", async (orig) => ({
+  ...(await orig()),
+  // KIND IR 일정: 10/21 3분기 실적 발표 확정 (DART 예상 10/8과 ±20일 안이라 예상은 빠져야 한다)
+  kindIrSchedule: async () => [
+    { title: "BNK 2026 Corporate Day 참석", place: "여의도", date: "2026-10-01", time: "10:00" },
+    { title: "Q3 2026 Earnings Release", place: "-", date: "2026-10-21", time: "16:00" },
+    { title: "2026년 3분기 경영실적 발표", place: "-", date: "2026-10-21", time: "16:00" },
+  ],
+}));
 vi.mock("../src/sources/dart.js", async (orig) => ({
   ...(await orig()),
   // 작년 10/8에 3분기 잠정실적 공시 → 올해 예상일 10/8(목)
@@ -47,7 +56,7 @@ describe("재무 순환", () => {
     expect((await env.DB.prepare("SELECT COUNT(*) n FROM estimates").first()).n).toBe(2);
     const ev = env.DB.raw.prepare("SELECT security_id, date, title, source, confirmed FROM events WHERE kind='earnings' ORDER BY security_id").all();
     expect(ev).toEqual([
-      { security_id: 5, date: "2026-10-08", title: "실적 발표 (예상)", source: "dart", confirmed: 0 },   // 국내: DART 공시 이력
+      { security_id: 5, date: "2026-10-21", title: "실적 발표", source: "kind", confirmed: 1 },          // 국내: KIND IR 확정 (DART 예상 10/8은 빠짐)
       { security_id: 6, date: "2026-11-17", title: "실적 발표 예정", source: "yahoo", confirmed: null }, // 미국: 야후
     ]);
     expect(JSON.parse((await env.DB.prepare("SELECT value FROM meta WHERE key='cron:fund'").first()).value)).toMatchObject({ updated_today: 2, done: true });
@@ -75,7 +84,7 @@ describe("서브요청 예산", () => {
 
   it("예산이 모자라면 남은 종목은 다음 틱이 이어서 하고, 날이 바뀌면 처음부터", async () => {
     const { fetchCost } = await import("../src/cron/weekly.js");
-    expect(fetchCost({ market: "KR" }, true)).toBe(7);
+    expect(fetchCost({ market: "KR" }, true)).toBe(8);
     expect(fetchCost({ market: "US", currency: "USD", financial_currency: "TWD" }, false)).toBe(4);
 
     const env = { DB: makeDb(), DART_API_KEY: "test" };

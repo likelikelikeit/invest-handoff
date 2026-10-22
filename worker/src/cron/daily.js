@@ -83,7 +83,7 @@ export async function runQuotes(env, markets, now = new Date(), m = null) {
   const own = !m;
   m ||= meter(env);
   try {
-    const secs = pickMarket(await trackedSecurities(env), markets);
+    const secs = pickMarket(await trackedSecurities(env, { light: true }), markets);
     let r;
     try { r = await writeBars(env, secs); } catch (e) { r = { bars: 0, written: 0, errors: [String(e.message || e)] }; }
     const report = { at: nowIso(now), markets, symbols: secs.length, bars: r.bars, written: r.written, errors: r.errors };
