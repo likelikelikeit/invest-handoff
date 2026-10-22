@@ -1,20 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- DART 매일 동기화 (scripts/dart-sync.mjs). 08:10, 18:10 (맥 미니 현지 시각 = KST). 경로는 맥 미니에 맞게 고친다. -->
+<!-- DART 매일 동기화 (scripts/dart-sync.mjs). 08:10, 18:10 (맥 미니 현지 시각 = KST).
+     /Users/ME 는 맥 미니 계정 홈으로 바꾼다. 실패 알림은 ~/bin/run-with-alert로 감싼다(home-system services/agent-workshop.md). -->
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.invest.dart-sync</string>
   <key>ProgramArguments</key>
   <array>
+    <string>/Users/ME/bin/run-with-alert</string>
+    <string>투자 DART 동기화</string>
     <string>/bin/zsh</string>
-    <string>/Users/hyungjin/invest-handoff/worker/scripts/launchd/dart-sync.sh</string>
+    <string>/Users/ME/invest-handoff/worker/scripts/launchd/dart-sync.sh</string>
   </array>
+  <!-- launchd 기본 PATH에는 /opt/homebrew/bin이 없어 npx(wrangler)를 못 찾는다(exit 127) -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>StartCalendarInterval</key>
   <array>
     <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>10</integer></dict>
     <dict><key>Hour</key><integer>18</integer><key>Minute</key><integer>10</integer></dict>
   </array>
-  <key>StandardOutPath</key><string>/Users/hyungjin/Library/Logs/invest-dart-sync.log</string>
-  <key>StandardErrorPath</key><string>/Users/hyungjin/Library/Logs/invest-dart-sync.log</string>
+  <key>StandardOutPath</key><string>/Users/ME/Library/Logs/invest-dart-sync.log</string>
+  <key>StandardErrorPath</key><string>/Users/ME/Library/Logs/invest-dart-sync.log</string>
 </dict>
 </plist>
