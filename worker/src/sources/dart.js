@@ -47,8 +47,11 @@ export function deriveQ4(rows) {
 
 /** DART 전체 재무제표 응답 한 건 → financials 행. */
 export function parseDartStatement(data, year, report) {
+  // 013 = 해당 보고서 없음. 그 밖의 오류 코드(010 키 오류 등)는 '데이터 없음'으로 삼키지 않고 알린다.
+  if (data && data.status && data.status !== "000" && data.status !== "013") {
+    throw new Error("DART " + data.status + ": " + (data.message || "응답 오류"));
+  }
   if (!data || data.status === "013" || !Array.isArray(data.list)) return null;
-  if (data.status !== "000") throw new Error("DART " + (data.status || "오류") + ": " + (data.message || "응답 오류"));
   const list = data.list.filter((x) => x.fs_div === "CFS" || !data.list.some((y) => y.fs_div === "CFS"));
   const rev = account(list, ["ifrs-full_Revenue"], ["매출액", "영업수익", "수익(매출액)"]);
   const op = account(list, ["dart_OperatingIncomeLoss", "ifrs-full_ProfitLossFromOperatingActivities"], ["영업이익"]);

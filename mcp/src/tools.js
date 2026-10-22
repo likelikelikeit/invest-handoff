@@ -95,7 +95,7 @@ async function getPortfolio(env) {
 
   return {
     as_of: nowKst(),
-    price_basis: "저장된 일별 종가(지연 시세). 종목별 기준일은 last_price_date를 보라.",
+    price_basis: "저장된 일봉(지연 시세). 장중에는 5분마다 갱신돼 오늘 행은 장중 값일 수 있다. 종목별 기준일은 last_price_date를 보라.",
     fx_usdkrw: fx,
     total: {
       stock_krw: round(stock, 0), cash_krw: round(cashKrw, 0), total_krw: round(total, 0),
@@ -308,7 +308,7 @@ async function getCompany(env, args) {
           position_in_52w_pct: range.results[0]?.high_52w > range.results[0]?.low_52w
             ? pct((price.close - range.results[0].low_52w) / (range.results[0].high_52w - range.results[0].low_52w))
             : null,
-          basis: "저장된 일별 종가(지연 시세)",
+          basis: "저장된 일봉(지연 시세). 장중에는 5분마다 갱신돼 오늘 행은 장중 값일 수 있다",
         }
       : null,
     position: p
@@ -513,7 +513,7 @@ export const READ_TOOLS = [
     name: "get_portfolio",
     title: "보유 포트폴리오",
     description: "지금 보유 중인 종목, 수량, 평단, 최신 종가, 원화 평가금액, 비중, 손익과 현금을 준다. " +
-      "금액은 원화 환산이고 시세는 저장된 일별 종가(지연)다.",
+      "금액은 원화 환산이고 시세는 저장된 일봉(지연, 장중 5분 갱신)이다.",
     inputSchema: NO_ARGS,
     run: (env) => getPortfolio(env),
   },

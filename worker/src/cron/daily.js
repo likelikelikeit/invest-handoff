@@ -13,10 +13,12 @@ import { refreshFundamentals } from "./weekly.js";
 import { fillCallPricesStmts } from "../routes/tech.js";
 import { evaluateViews } from "../lib/view-evaluation.js";
 import { meter } from "../lib/budget.js";
+import { dartInWorker } from "../lib/dart-gate.js";
 
 const BACKFILL_PER_RUN = 2;
 const GAP_DAYS = 5;        // 마지막 봉이 이보다 오래된 종목은 일봉 이력으로 메운다
 const GAP_PER_RUN = 5;
+const MISSING_RETRY = 5;
 // DART 분기 이력이 이만큼 안 되는 국내 종목은 국내장 마감 때마다 하나씩, 한 사업연도(최대 4요청)씩 보강한다.
 // 과거 이력을 한 번에 채우는 건 맥 미니의 scripts/dart-history.mjs가 한다.
 export const DART_MIN_QUARTERS = 12;
@@ -28,7 +30,7 @@ export const DART_REPORTS_PER_RUN = 4;
  */
 export async function dartBackfillTarget(env, now = new Date()) {
   const since = new Date(now.getTime() - 3 * 86400000).toISOString().slice(0, 10);
-  if (!env.DART_API_KEY) return null;
+  if (!dartInWorker(env)) return null;
   return env.DB.prepare(
     "SELECT s.id, s.name, s.ticker, s.ysym, s.market, s.currency, s.dart_corp_code, " +
     "COALESCE((SELECT CAST(value AS INTEGER) FROM meta WHERE key = 'dart:cursor:' || s.id), 0) AS dart_offset, " +
@@ -62,7 +64,15 @@ async function writeBars(env, secs) {
     else if (!q) missing.push(s.ysym);
   }
   const r = bars.length ? await upsertBarsStmt(env, bars).run() : { meta: { changes: 0 } };
-  return { bars: bars.length, written: r.meta.changes, errors: missing.length ? ["시세 없음: " + missing.join(", ")] : [], quotes };
+  // 묶음에서 빠진 심볼(야후가 가끔 환율 등을 빼먹는다)은 종목별 일봉으로 메운다. 최대 5개.
+  const lost = secs.filter((s) => missing.includes(s.ysym)).slice(0, MISSING_RETRY);
+  const h = lost.length ? await refreshHistory(env, lost, "5d") : { ok: 0, errors: [] };
+  const skipped = missing.length - lost.length;
+  return {
+    bars: bars.length + h.ok, written: r.meta.changes + h.ok, quotes,
+    // 종목별로도 못 받은 것은 h.errors에 심볼과 함께 남는다
+    errors: [...h.errors, ...(skipped > 0 ? ["묶음에서 빠졌고 이번엔 다시 못 받음: " + skipped + "개"] : [])],
+  };
 }
 
 /** 종목별 일봉 이력 (새 종목 백필·빈 날 메우기). 문장은 종목마다 1개라 batch로. */

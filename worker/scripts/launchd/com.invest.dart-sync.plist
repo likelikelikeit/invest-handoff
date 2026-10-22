@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- DART 매일 동기화 (scripts/dart-sync.mjs). 08:10, 18:10 (맥 미니 현지 시각 = KST). 경로는 맥 미니에 맞게 고친다. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.invest.dart-sync</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/hyungjin/invest-handoff/worker/scripts/launchd/dart-sync.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>10</integer></dict>
+    <dict><key>Hour</key><integer>18</integer><key>Minute</key><integer>10</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>/Users/hyungjin/Library/Logs/invest-dart-sync.log</string>
+  <key>StandardErrorPath</key><string>/Users/hyungjin/Library/Logs/invest-dart-sync.log</string>
+</dict>
+</plist>

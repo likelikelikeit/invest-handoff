@@ -10,6 +10,7 @@ import { kindIrSchedule, krEarningsFromKind } from "../sources/kind.js";
 import { trackedEquities, upsertFinancialsStmt, upsertEstimatesStmt, replaceEarningsStmts } from "../lib/fundamentals.js";
 import { nowIso, todayKst } from "../lib/time.js";
 import { meter } from "../lib/budget.js";
+import { dartInWorker } from "../lib/dart-gate.js";
 
 const addDaysIso = (date, n) => {
   const d = new Date(date + "T00:00:00Z");
@@ -51,7 +52,7 @@ export async function refreshFundamentals(env, secOrId, {
   })]);
   else if (sec.market === "KR") {
     if (withMarketSource) sources.push(["naver", () => naverFundamentals(sec.ticker, now)]);
-    if (withDart && env.DART_API_KEY && sec.dart_corp_code) {
+    if (withDart && dartInWorker(env) && sec.dart_corp_code) {
       sources.push(["dart", () => dartFundamentals(env.DART_API_KEY, sec.dart_corp_code, now, {
         offset: dartOffset, count: dartCount, batchByYear: dartBatchByYear,
       })]);
@@ -64,7 +65,7 @@ export async function refreshFundamentals(env, secOrId, {
         return { financials: [], estimates: [], earnings: e ? { ...e, source: "kind" } : null };
       }]);
     }
-    if (withMarketSource && env.DART_API_KEY && sec.dart_corp_code) {
+    if (withMarketSource && dartInWorker(env) && sec.dart_corp_code) {
       sources.push(["dart-list", async () => {
         const today = todayKst(now);
         const list = await dartDisclosures(env.DART_API_KEY, sec.dart_corp_code, addDaysIso(today, -400), today);
@@ -164,7 +165,7 @@ async function rotate(env, now, m) {
   // 외부 서버에 버스트를 만들지 않게 순서대로
   while (state.cursor < all.length) {
     const sec = all[state.cursor];
-    const hasDart = Boolean(env.DART_API_KEY && sec.dart_corp_code);
+    const hasDart = Boolean(dartInWorker(env) && sec.dart_corp_code);
     const withDart = hasDart && sec.id % 7 === dow;
     const reserve = sec.market === "US" ? SESSION_RESERVE : 0;
     // 남은 종목은 다음 틱에. D1은 종목당 문장 7개 안팎(재무·추정·실적일 출처마다 2~3·통화)

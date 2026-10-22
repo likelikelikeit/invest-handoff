@@ -42,7 +42,7 @@ const { rotateFundamentals } = await import("../src/cron/weekly.js");
 
 describe("재무 순환", () => {
   it("국내·미국 추적 종목을 갱신하고 DART를 우선해 보고를 남긴다", async () => {
-    const env = { DB: makeDb(), DART_API_KEY: "test" };
+    const env = { DB: makeDb(), DART_API_KEY: "test", DART_IN_WORKER: "1" };
     const at = "2026-09-19T00:00:00+09:00";
     const ins = env.DB.raw.prepare("INSERT INTO securities (name,ticker,ysym,market,currency,dart_corp_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)");
     ins.run("삼성전자", "005930", "005930.KS", "KR", "KRW", "00126380", at, at);
@@ -87,7 +87,7 @@ describe("서브요청 예산", () => {
     expect(fetchCost({ market: "KR" }, true)).toBe(8);
     expect(fetchCost({ market: "US", currency: "USD", financial_currency: "TWD" }, false)).toBe(4);
 
-    const env = { DB: makeDb(), DART_API_KEY: "test" };
+    const env = { DB: makeDb(), DART_API_KEY: "test", DART_IN_WORKER: "1" };
     const at = "2026-09-19T00:00:00+09:00";
     const ins = env.DB.raw.prepare("INSERT INTO securities (name,ticker,ysym,market,currency,created_at,updated_at) VALUES (?,?,?,?,?,?,?) RETURNING id");
     for (let i = 0; i < 8; i++) {

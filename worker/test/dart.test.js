@@ -75,7 +75,7 @@ describe("DART 배치", () => {
 
 describe("dartBackfillTarget (실제 SQLite)", () => {
   function setup() {
-    const env = { DB: makeDb(), DART_API_KEY: "x" };
+    const env = { DB: makeDb(), DART_API_KEY: "x", DART_IN_WORKER: "1" };
     const at = "2026-09-19T00:00:00+09:00";
     const ins = env.DB.raw.prepare("INSERT INTO securities (name, ticker, ysym, market, currency, dart_corp_code, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)");
     ins.run("하이닉스", "000660", "000660.KS", "KR", "KRW", "00164779", at, at); // 5
