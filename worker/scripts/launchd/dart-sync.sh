@@ -6,4 +6,4 @@
 #   CLOUDFLARE_ACCOUNT_ID=...
 set -a; source "$HOME/.invest-handoff.env"; set +a
 cd "$(dirname "$0")/../.." || exit 1          # worker/
-exec /opt/homebrew/bin/node scripts/dart-sync.mjs
+exec /opt/homebrew/bin/node scripts/dart-sync.mjs "$@"

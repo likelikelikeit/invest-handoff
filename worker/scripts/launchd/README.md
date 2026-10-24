@@ -13,8 +13,12 @@ OpenDART는 Cloudflare 서버 요청을 오류 페이지로 돌려보낸다(302 
    `chmod 600 ~/.invest-handoff.env`
 3. 과거 이력 한 번: `cd worker && set -a && source ~/.invest-handoff.env && set +a && node scripts/dart-history.mjs`
    (처음엔 `--dry`로 받아만 보고 `.seed/dart-history.sql`을 확인해도 된다)
-4. 매일 동기화 등록: `com.invest.dart-sync.plist`의 `/Users/ME`를 맥 미니 계정 홈으로 바꾸고(PATH에 `/opt/homebrew/bin`이 들어 있어야 launchd에서 npx를 찾는다), 실패 알림용 `~/bin/run-with-alert`가 있는지 확인한 뒤
-   `cp scripts/launchd/com.invest.dart-sync.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/com.invest.dart-sync.plist`
+4. 매일 동기화 등록: `com.invest.dart-sync.plist`의 `/Users/ME`를 맥 미니 계정 홈으로 바꾸고(PATH에 `/opt/homebrew/bin`이 들어 있어야 launchd에서 npx를 찾는다), 실패 알림용 `~/bin/run-with-alert`가 있는지 확인한다. LaunchAgent는 매시 `:10`에 확인하지만 스크립트가 오전(08:10 이후)·오후(18:10 이후) 슬롯을 로컬 상태 파일로 가려 **실제 DART·D1 작업은 하루 최대 두 번만** 한다. 정시를 놓치면 다음 시간에 한 번 따라잡는다.
+   ```bash
+   cp scripts/launchd/com.invest.dart-sync.plist ~/Library/LaunchAgents/
+   launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.invest.dart-sync.plist 2>/dev/null || true
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.invest.dart-sync.plist
+   ```
 5. 확인: `launchctl list | grep invest`, `~/Library/Logs/invest-dart-sync.log`, 또는 D1 meta `cron:dart`. 실패하면 작업실 텔레그램 봇이 알린다.
 
 2026-10-22 설치됨(Agent Workshop 세션): 과거 이력 완료, LaunchAgent 등록·수동 실행 exit 0, 실패 알림 연결.

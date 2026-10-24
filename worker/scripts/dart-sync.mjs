@@ -13,6 +13,16 @@
 import { dartFundamentals, dartDisclosures, krEarningsFromDisclosures } from "../src/sources/dart.js";
 import { upsertFinancialsStmt, replaceEarningsStmts } from "../src/lib/fundamentals.js";
 import { dartKey, sqlEnv, runSql, krDartSecurities, krw, reportStmt, sleep, where, dry } from "./lib-local.mjs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, resolve } from "node:path";
+import { dartSyncSlot, shouldRunDartSync } from "./lib-dart-schedule.mjs";
+
+const scheduled = process.argv.includes("--scheduled");
+const stateFile = resolve(homedir(), ".local", "state", "invest-handoff", "dart-sync-slot");
+const lastSlot = existsSync(stateFile) ? readFileSync(stateFile, "utf8").trim() : "";
+const due = shouldRunDartSync(lastSlot);
+if (scheduled && !due.run) process.exit(0);
 
 const key = dartKey();
 if (!key) {
@@ -60,5 +70,13 @@ for (const s of secs) {
 
 const report = { at, stocks: secs.length, financial_rows: fin, earnings: earn, errors };
 stmts.push(reportStmt("cron:dart", report));
-runSql("dart-sync", stmts);
+const wrote = runSql("dart-sync", stmts);
+if (errors.length && fin === 0) throw new Error("DART 동기화가 전부 실패했습니다: " + errors.slice(0, 3).join(" / "));
+if (wrote) {
+  const slot = due.slot || dartSyncSlot();
+  if (slot) {
+    mkdirSync(dirname(stateFile), { recursive: true });
+    writeFileSync(stateFile, slot + "\n");
+  }
+}
 console.log("재무 " + fin + "행 · 실적일 " + earn + "종목" + (errors.length ? " · 오류 " + errors.length + "건: " + errors.slice(0, 3).join(" / ") : ""));
