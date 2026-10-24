@@ -25,6 +25,7 @@ const today = kst().slice(0, 10);
 const from = new Date(Date.parse(today) - 400 * 86400e3).toISOString().slice(0, 10);
 const at = kst().slice(0, 19) + "+09:00";
 
+console.log("── dart-sync 시작 " + at + " ──"); // 로그에서 실행 시각을 가르려고
 const secs = krDartSecurities();
 console.log("국내 종목 " + secs.length + "개 (" + where + (dry ? ", 시험 실행" : "") + ")");
 
