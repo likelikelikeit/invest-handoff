@@ -5,6 +5,7 @@
 import { json, html, CORS, HttpError } from "./http.js";
 import { authServerMetadata, resourceMetadata, register, authorizePage, authorizeApprove, token, verifyAccess } from "./oauth.js";
 import { handleRpc } from "./mcp.js";
+import { simulationEndpoint } from './simulation.js';
 
 /** 인증 실패는 rfc9728대로 어디서 인가받는지 알려준다. 클라이언트는 이걸 보고 OAuth를 시작한다. */
 const unauthorized = (origin, message) =>
@@ -28,6 +29,7 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
 
     try {
+      if (path === '/sim/mcp') return await simulationEndpoint(request,env);
       // ── 메타데이터 ─────────────────────────────
       // 클라이언트는 자원 경로를 붙여서도 물어본다(.../oauth-authorization-server/mcp).
       if (path.startsWith("/.well-known/oauth-authorization-server")) return json(authServerMetadata(origin));

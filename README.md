@@ -2,6 +2,8 @@
 
 개인 투자 관리·리서치 웹앱. 설계는 [SPEC.md](SPEC.md), 에이전트 작업 규약은 [AGENTS.md](AGENTS.md).
 
+모의투자 대회는 별도 `모의투자` 탭에서 관리한다. 계좌·분석·주문·체결과 전용 MCP의 범위·배포 순서는 [모의투자 안내](docs/SIMULATION.md). 현재 가격·환율 기준 예비 운용이며 배당·분할 자동 반영과 최종 심사는 후속 단계다.
+
 - 프론트 `web/` — Svelte 5 + Vite, GitHub Pages (`https://likelikelikeit.github.io/invest-handoff/`)
 - 백엔드 `worker/` — Cloudflare Worker `invest-api` (`https://invest-api.hyungjin0416.workers.dev`) + D1 `invest`
 - MCP `mcp/` — Cloudflare Worker `invest-mcp` (`https://invest-mcp.hyungjin0416.workers.dev`). Claude 커스텀 커넥터가 같은 D1을 읽는다

@@ -17,6 +17,7 @@
   import Calendar from "./routes/Calendar.svelte";
   import Others from "./routes/Others.svelte";
   import Macro from "./routes/Macro.svelte";
+  import Simulation from './routes/Simulation.svelte';
   import Fab from "./components/Fab.svelte";
   import AddSheet from "./components/AddSheet.svelte";
   import ImportSheet from "./components/ImportSheet.svelte";
@@ -67,6 +68,8 @@
       <Portfolio />
     {:else if current === "views"}
       <Views />
+    {:else if current === 'simulation'}
+      <Simulation />
     {:else if current === "more" && route.parts[1] === "rules"}
       <Rules />
     {:else if current === "more" && route.parts[1] === "calendar"}
@@ -82,7 +85,7 @@
     {/if}
   </main>
 
-  {#if settings.token}<Fab />{/if}
+  {#if settings.token && current !== 'simulation'}<Fab />{/if}
   <AddSheet />
   <ImportSheet />
   <ChangeSheet />
@@ -101,7 +104,7 @@
   /* 모바일: 하단 고정 탭 */
   .tabbar{
     position:fixed;left:0;right:0;bottom:0;z-index:10;
-    display:grid;grid-template-columns:repeat(5,1fr);
+    display:grid;grid-template-columns:repeat(6,1fr);
     height:calc(var(--tabbar-h) + env(safe-area-inset-bottom));
     padding-bottom:env(safe-area-inset-bottom);
     background:color-mix(in srgb,var(--bg) 88%,transparent);

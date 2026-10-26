@@ -16,6 +16,7 @@ import { runMisc } from "./misc.js";
 import { rotateFundamentals } from "./weekly.js";
 import { meter } from "../lib/budget.js";
 import { nowIso } from "../lib/time.js";
+import { refreshSimulationPrices,settleSimulation,snapshotSimulation } from '../lib/simulation.js';
 
 export const CRON_TICK = "*/5 * * * *";
 
@@ -62,7 +63,15 @@ export async function runTick(env, now = new Date()) {
     if (plan.closeKr && await step("close:kr", () => runDaily(env, "kr", now, m))) done.kr = plan.date;
     if (plan.closeUs && await step("close:us", () => runDaily(env, "us", now, m))) done.us = plan.date;
     if (plan.misc && await step("misc", () => runMisc(env, now))) done.misc = plan.date;
-    if (plan.rotate && m.fetchLeft() > 8 && m.d1Left() > 10) await step("fundamentals", () => rotateFundamentals(env, now, m));
+    // 장 밖의 분리된 틱에서 처리해 기존 시세·재무 작업과 D1 예산을 나눈다.
+    const simSlot=plan.rotate && now.getUTCMinutes()%15===10 && !plan.closeKr && !plan.closeUs && !plan.misc;
+    if(simSlot && m.d1Left()>25) await step('simulation',async()=>{
+      await refreshSimulationPrices(env,now);
+      await settleSimulation(env,now,Math.min(20,m.d1Left()-16));
+      // 일별 평가는 두 시장 모두 닫힌 22시대에만. 주문 대기분이 남으면 다음 틱에서 다시 시도한다.
+      if(now.getUTCHours()===22 && m.d1Left()>16) await snapshotSimulation(env,now);
+    });
+    if (!simSlot && plan.rotate && m.fetchLeft() > 8 && m.d1Left() > 10) await step("fundamentals", () => rotateFundamentals(env, now, m));
 
     if (JSON.stringify(done) !== before) {
       await env.DB.prepare(

@@ -1,9 +1,10 @@
-// 하단 탭 5개 [확정, SPEC §4.1]
+// 모의투자 별도 탭 추가 (2026-10-26 사용자 요청).
 export const TABS = [
   { key: "home", label: "홈", href: "#/" },
   { key: "securities", label: "종목", href: "#/securities" },
   { key: "portfolio", label: "포트폴리오", href: "#/portfolio" },
   { key: "views", label: "투자의견", href: "#/views" },
+  { key: "simulation", label: "모의투자", href: "#/simulation" },
   { key: "more", label: "더보기", href: "#/more" },
 ];
 

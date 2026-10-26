@@ -20,11 +20,24 @@ import { listEvents, createEvent, deleteEvent, getMacro, saveDots, refreshMacro 
 import { listDrafts, applyDraft, discardDraft } from "./routes/drafts.js";
 import { listSuspensions, createSuspension, deleteSuspension } from "./routes/coverage.js";
 import { listNotes, listNoteTags, createNote, patchNote, deleteNote } from "./routes/notes.js";
+import { simList,simCreate,simEnd,simDetail,simToken,simThesis,simOrder,simCancel,simRanking,simSecurities,simRegister,simSearch } from './routes/simulation.js';
 
 const ID = "(?<id>\\d+)";
 
 // [method, 경로 정규식, handler(request, env, headers, params, url)]
 const ROUTES = [
+  ['GET','/sim/securities',simSecurities],
+  ['POST','/sim/securities',simRegister],
+  ['GET','/sim/search',simSearch],
+  ['GET','/sim/contests',simList],
+  ['POST','/sim/contests',simCreate],
+  ['POST','/sim/contests/(?<sid>[a-f0-9-]+)/end',simEnd],
+  ['GET','/sim/contests/(?<sid>[a-f0-9-]+)/ranking',simRanking],
+  ['GET','/sim/accounts/(?<sid>[a-f0-9-]+)',simDetail],
+  ['POST','/sim/accounts/(?<sid>[a-f0-9-]+)/token',simToken],
+  ['POST','/sim/accounts/(?<sid>[a-f0-9-]+)/theses',simThesis],
+  ['POST','/sim/accounts/(?<sid>[a-f0-9-]+)/orders',simOrder],
+  ['POST','/sim/accounts/(?<sid>[a-f0-9-]+)/cancel',simCancel],
   ["GET", "/quotes", (req, env, h, p, url) => handleQuotes(url, env, h)],
   ["GET", "/search", (req, env, h, p, url) => handleSearch(url, env, h)],
   ["POST", "/import", (req, env, h, p, url) => handleImport(req, url, env, h)],

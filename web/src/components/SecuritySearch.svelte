@@ -3,7 +3,7 @@
   // 2글자 이상 → 300ms 디바운스 → 드롭다운. 한글로 쳤으면 야후 영문명 대신 친 이름을 유지.
   import { api } from "../lib/api.js";
 
-  let { value = $bindable(""), onpick, placeholder = "예: 삼성전자, NVDA", id = "sec-search", label = "종목명" } = $props();
+  let { value = $bindable(""), onpick, placeholder = "예: 삼성전자, NVDA", id = "sec-search", label = "종목명", searchPath = '/search' } = $props();
 
   let items = $state([]);
   let cursor = $state(-1);
@@ -27,7 +27,7 @@
       if (q === lastQ && open) return;
       lastQ = q;
       try {
-        const r = await api("/search?q=" + encodeURIComponent(q));
+        const r = await api(searchPath+"?q=" + encodeURIComponent(q));
         items = r.results || [];
         cursor = -1;
         note = items.length ? "" : "결과가 없습니다. 직접 입력해도 됩니다.";
