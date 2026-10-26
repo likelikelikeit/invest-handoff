@@ -64,7 +64,8 @@ export async function runTick(env, now = new Date()) {
     if (plan.closeUs && await step("close:us", () => runDaily(env, "us", now, m))) done.us = plan.date;
     if (plan.misc && await step("misc", () => runMisc(env, now))) done.misc = plan.date;
     // 장 밖의 분리된 틱에서 처리해 기존 시세·재무 작업과 D1 예산을 나눈다.
-    const simSlot=plan.rotate && now.getUTCMinutes()%15===10 && !plan.closeKr && !plan.closeUs && !plan.misc;
+    const simCandidate=plan.rotate && now.getUTCMinutes()%15===10 && !plan.closeKr && !plan.closeUs && !plan.misc;
+    const simSlot=simCandidate && !!(await env.DB.prepare("SELECT id FROM sim_contests WHERE status='active' LIMIT 1").first());
     if(simSlot && m.d1Left()>25) await step('simulation',async()=>{
       await refreshSimulationPrices(env,now);
       await settleSimulation(env,now,Math.min(20,m.d1Left()-16));
