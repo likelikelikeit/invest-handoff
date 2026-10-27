@@ -29,6 +29,7 @@ export async function quote(symbol) {
     prevClose: prev,
     currency: meta.currency || null,
     exchange: meta.fullExchangeName || meta.exchangeName || null,
+    instrumentType: meta.instrumentType || null,
     marketState: meta.marketState || null,
     // 야후가 준 마지막 체결 시각. 지연 시세의 기준 시각으로 화면에 쓴다.
     time: typeof meta.regularMarketTime === "number" ? new Date(meta.regularMarketTime * 1000).toISOString() : null,

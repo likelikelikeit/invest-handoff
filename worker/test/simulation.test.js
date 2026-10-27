@@ -1,6 +1,6 @@
 import {describe,it,expect,beforeEach} from 'vitest';
 import {makeDb} from './d1shim.js';
-import {createContest,saveThesis,submitOrder,cancelOrder,settleSimulation,getAccount,getPerformance,rotateToken,authenticateSim,marketDate,completedDate,snapshotSimulation,registerSecurity,refreshSimulationPrices} from '../src/lib/simulation.js';
+import {createContest,saveThesis,submitOrder,cancelOrder,settleSimulation,getAccount,getPerformance,rotateToken,authenticateSim,marketDate,completedDate,snapshotSimulation,registerSecurity,refreshSimulationPrices,simPriceStmt} from '../src/lib/simulation.js';
 import api from '../src/index.js';
 import mcp from '../../mcp/src/index.js';
 import {trackedSecurities} from '../src/lib/prices.js';
@@ -20,12 +20,21 @@ beforeEach(async()=>{
   env.DB.raw.exec("INSERT INTO sim_fx(date,close) VALUES('2026-10-26',1400),('2026-10-27',1500)");
 });
 describe('모의투자 회계·권한',()=>{
+  it('같은 모의 일봉을 다시 받아도 행을 쓰지 않는다',async()=>{
+    const r=await simPriceStmt(env,sid,[{date:'2026-10-27',open:1100,close:1200}]).run();
+    expect(r.meta.changes).toBe(0);
+    const changed=await simPriceStmt(env,sid,[{date:'2026-10-27',open:1100,close:1250}]).run();
+    expect(changed.meta.changes).toBe(1);
+  });
   it('네 계좌만 만들고 실제 보유와 현금은 바꾸지 않는다',()=>{
     expect(env.DB.raw.prepare('SELECT COUNT(*) AS n FROM sim_accounts').get().n).toBe(4);
     expect(env.DB.raw.prepare('SELECT COUNT(*) AS n FROM positions').get().n).toBe(0);
     expect(env.DB.raw.prepare('SELECT COUNT(*) AS n FROM cash').get().n).toBe(0);
   });
   it('진행 대회를 중복 개설하지 않는다',async()=>{await expect(createContest(env,{name:'중복'},mon)).rejects.toThrow();});
+  it('활성화되지 않은 새 체결 방식을 요청하면 구 규칙으로 바꿔치기하지 않는다',async()=>{
+    await expect(createContest(env,{name:'시험',execution_mode:'intraday'},mon)).rejects.toMatchObject({status:409});
+  });
   it('접수일에는 체결하지 않고 다음 거래일 시가·비용으로 한 번만 체결한다',async()=>{
     const t=await thesis();await order(t);
     await settleSimulation(env,mon);expect((await getAccount(env,aid,mon)).cash).toBe(100000);
@@ -80,10 +89,9 @@ describe('모의투자 회계·권한',()=>{
     await order(await thesis(aid,us),{qty:1});await settleSimulation(env,tue);
     expect(env.DB.raw.prepare('SELECT status FROM sim_orders').get().status).toBe('pending');
   });
-  it('접수일에만 취소하고 다른 계좌 주문은 취소하지 못한다',async()=>{
+  it('대기 중에는 날짜가 지나도 취소할 수 있고 다른 계좌 주문은 취소하지 못한다',async()=>{
     const o=await order(await thesis());await expect(cancelOrder(env,bid,{order_id:o.order.id},mon)).rejects.toMatchObject({status:404});
-    await expect(cancelOrder(env,aid,{order_id:o.order.id},tue)).rejects.toMatchObject({status:409});
-    await cancelOrder(env,aid,{order_id:o.order.id},mon);await settleSimulation(env,tue);
+    await cancelOrder(env,aid,{order_id:o.order.id},tue);await settleSimulation(env,tue);
     expect(env.DB.raw.prepare('SELECT COUNT(*) AS n FROM sim_fills').get().n).toBe(0);
   });
   it('계좌 키를 회전하고 앱 소유자 API에 사용할 수 없다',async()=>{
@@ -103,6 +111,14 @@ describe('모의투자 회계·권한',()=>{
   it('모의 종목이 개인 영역의 시세 수집 대상에 들어가지 않는다',async()=>{
     await thesis();expect((await trackedSecurities(env)).some(s=>s.ysym==='KRSTOCK')).toBe(false);
   });
+  it('실제 주식·ETF만 모의 종목으로 등록하고 다른 자산은 거절한다',async()=>{
+    const history=async()=>[{date:'2026-10-27',open:100,close:105}];
+    for(const instrumentType of ['EQUITY','ETF']) {
+      const r=await registerSecurity(env,{symbol:instrumentType},mon,{quote:async()=>({currency:'USD',exchange:'NasdaqGS',instrumentType}),history});
+      expect(r.security.ysym).toBe(instrumentType);
+    }
+    await expect(registerSecurity(env,{symbol:'SPOT'},mon,{quote:async()=>({currency:'USD',exchange:'NasdaqGS',instrumentType:'FUTURE'}),history})).rejects.toMatchObject({status:400});
+  });
   it('체결 대기분을 처리한 뒤 일별 평가를 저장한다',async()=>{
     await order(await thesis());await snapshotSimulation(env,tue);expect((await getPerformance(env,aid,tue)).snapshots).toHaveLength(0);
     await settleSimulation(env,tue);await snapshotSimulation(env,tue);expect((await getPerformance(env,aid,tue)).snapshots).toHaveLength(1);
@@ -119,7 +135,7 @@ describe('모의투자 회계·권한',()=>{
     const privateTables=env.DB.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND substr(name,1,4)<>'sim_' AND substr(name,1,7)<>'sqlite_'").all().map(t=>t.name);
     const dump=()=>Object.fromEntries(privateTables.map(t=>[t,env.DB.raw.prepare('SELECT * FROM '+t).all()]));
     const before=dump();
-    const sources={quote:async()=>({currency:'USD',exchange:'NasdaqGS'}),history:async()=>[{date:'2026-10-27',open:100,close:105}]};
+    const sources={quote:async()=>({currency:'USD',exchange:'NasdaqGS',instrumentType:'EQUITY'}),history:async()=>[{date:'2026-10-27',open:100,close:105}]};
     const s=await registerSecurity(env,{symbol:'ONLYSIM',name:'모의 전용'},mon,sources);
     await order(await thesis(aid,s.security.id),{qty:1});
     await refreshSimulationPrices(env,tue,sources);await settleSimulation(env,tue);

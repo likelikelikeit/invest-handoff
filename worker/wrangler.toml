@@ -17,6 +17,8 @@ ALLOW_ORIGINS = "https://likelikelikeit.github.io,http://localhost:5173,http://1
 # 키 시크릿이 없으면 /import만 501, 나머지는 정상.
 IMPORT_LLM_PROVIDER = "anthropic"
 # IMPORT_LLM_MODEL = ""   # 비우면 공급자 기본 모델
+# 모의투자 새 대회를 15분봉 장중 체결(규칙 v2) 또는 시가 전용(v3)으로 연다. 체결은 invest-simulation-cron Worker가 한다.
+SIM_INTRADAY_ENABLED = "true"
 
 # 크론 (SPEC §7.3, UTC 고정). 5분 틱 하나가 시각을 보고 시세·마감·거시·재무 순환을 고른다(src/cron/tick.js).
 # 문자열은 CRON_TICK과 같아야 한다. 무료 플랜 트리거는 계정당 5개라 하나만 쓴다.

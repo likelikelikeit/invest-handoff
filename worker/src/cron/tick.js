@@ -63,17 +63,17 @@ export async function runTick(env, now = new Date()) {
     if (plan.closeKr && await step("close:kr", () => runDaily(env, "kr", now, m))) done.kr = plan.date;
     if (plan.closeUs && await step("close:us", () => runDaily(env, "us", now, m))) done.us = plan.date;
     if (plan.misc && await step("misc", () => runMisc(env, now))) done.misc = plan.date;
-    // 장 밖의 분리된 틱에서 처리해 기존 시세·재무 작업과 D1 예산을 나눈다.
+    // 개인 재무 순환은 기존 주기를 유지한다. 모의투자는 남은 예산에서만 실행한다.
+    if (plan.rotate && m.fetchLeft() > 8 && m.d1Left() > 10) await step("fundamentals", () => rotateFundamentals(env, now, m));
     const simCandidate=plan.rotate && now.getUTCMinutes()%15===10 && !plan.closeKr && !plan.closeUs && !plan.misc;
-    const simSlot=simCandidate && !!(await env.DB.prepare("SELECT id FROM sim_contests WHERE status='active' LIMIT 1").first());
+    const simSlot=simCandidate && m.d1Left()>26 && m.fetchLeft()>4 && await env.DB.prepare("SELECT id,rules_version FROM sim_contests WHERE status='active' AND rules_version='1' LIMIT 1").first();
     if(simSlot && m.d1Left()>25) await step('simulation',async()=>{
       await refreshSimulationPrices(env,now);
-      await settleSimulation(env,now,Math.min(20,m.d1Left()-16));
-      // 일별 평가는 두 시장 모두 닫힌 22시대에만. 주문 대기분이 남으면 다음 틱에서 다시 시도한다.
-      if(now.getUTCHours()===22 && m.d1Left()>16) await snapshotSimulation(env,now);
+      if(simSlot.rules_version==='1') {
+        await settleSimulation(env,now,Math.min(20,m.d1Left()-16));
+      }
+      if(now.getUTCHours()===22 && m.d1Left()>20) await snapshotSimulation(env,now);
     });
-    if (!simSlot && plan.rotate && m.fetchLeft() > 8 && m.d1Left() > 10) await step("fundamentals", () => rotateFundamentals(env, now, m));
-
     if (JSON.stringify(done) !== before) {
       await env.DB.prepare(
         "INSERT INTO meta (key, value, updated_at) VALUES ('tick:done', ?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"

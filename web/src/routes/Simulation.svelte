@@ -7,17 +7,18 @@
   import { api,settings } from '../lib/api.js';
   import { won,pctSigned,tonePct,stamp,qtyStr,usd } from '../lib/format.js';
   let contests=$state([]),accounts=$state([]),ranking=$state([]),contestId=$state(''),accountId=$state('');
-  let rules=$state(null),detail=$state(null),busy=$state(false),loading=$state(true),error=$state(''),offline=$state(false),message=$state('');
+  let rules=$state(null),rulesByVersion=$state({}),detail=$state(null),busy=$state(false),loading=$state(true),error=$state(''),offline=$state(false),message=$state('');
   let createOpen=$state(false),thesisOpen=$state(false),orderOpen=$state(false),keyOpen=$state(false),secret=$state('');
-  let name=$state('모의투자 시즌 1'),initial=$state(100000000),fee=$state(10),slippage=$state(5),section=$state('holdings');
+  let name=$state('모의투자 시즌 1'),initial=$state(100000000),fee=$state(10),slippage=$state(5),section=$state('holdings'),executionMode=$state('intraday');
   let securities=$state([]),securityId=$state(''),thesis=$state(''),valuation=$state(''),scenarios=$state(''),risks=$state(''),invalidation=$state(''),sources=$state('');
   let thesisId=$state(''),side=$state('buy'),qty=$state(1),reason=$state(''),clientOrderId=$state('');
   let detailSequence=0,rankingSequence=0;
   const contest=$derived(contests.find(c=>c.id===contestId));
+  const selectedRules=$derived(rulesByVersion[contest?.rules_version]||rules);
   const current=$derived(detail?.account);
   const members=$derived(accounts.filter(a=>a.contest_id===contestId));
   const disabled=$derived(busy||offline||contest?.status!=='active');
-  const labels={pending:'미체결',filled:'체결',cancelled:'취소',rejected:'거절'};
+  const labels={pending:'체결 대기',accepted:'접수됨',waiting:'체결 대기',filled:'체결 완료',cancelled:'취소됨',rejected:'거절됨'};
   const fields=[['투자 논리','thesis'],['가치평가','valuation'],['시나리오','scenarios'],['위험','risks'],['철회 조건','invalidation'],['출처','sources']];
 
   async function chooseAccount(id){
@@ -36,7 +37,7 @@
   async function refresh(){
     loading=true;error='';offline=false;
     try{
-      const r=await api('/sim/contests');contests=r.contests;accounts=r.accounts;rules=r.rules;offline=!!r._offline;
+      const r=await api('/sim/contests');contests=r.contests;accounts=r.accounts;rules=r.rules;rulesByVersion=r.rules_by_version||{};offline=!!r._offline;
       if(contests.length){
         const id=contests.some(c=>c.id===contestId)?contestId:contests[0].id;
         const keep=accountId;await chooseContest(id);if(keep&&accounts.some(a=>a.id===keep&&a.contest_id===id))await chooseAccount(keep);
@@ -49,10 +50,10 @@
     try{await fn();}catch(e){error=e.message;}finally{busy=false;}
   }
   const create=()=>mutate(async()=>{
-    const r=await api('/sim/contests',{method:'POST',body:{name,initial_cash:initial,fee_bps:fee,slippage_bps:slippage}});
+    const r=await api('/sim/contests',{method:'POST',body:{name,initial_cash:initial,fee_bps:fee,slippage_bps:slippage,execution_mode:rules?.version==='1'?undefined:executionMode}});
     createOpen=false;contestId=r.id;await refresh();message='동일 자금으로 네 계좌를 만들었습니다.';
   });
-  const end=()=>{if(confirm('대회를 종료할까요? 종료 후에는 주문과 분석을 추가할 수 없습니다.'))mutate(async()=>{await api('/sim/contests/'+contestId+'/end',{method:'POST',body:{}});await refresh();});};
+  const end=()=>{if(confirm('대회를 종료할까요? 미체결 주문은 취소되며 종료 시점의 시세·환율로 성과가 고정됩니다.'))mutate(async()=>{await api('/sim/contests/'+contestId+'/end',{method:'POST',body:{}});await refresh();});};
   const issueKey=()=>{
     if(members.find(a=>a.id===accountId)?.connected&&!confirm('새 키를 발급하면 기존 연결 키는 즉시 폐기됩니다. 재발급할까요?'))return;
     mutate(async()=>{const r=await api('/sim/accounts/'+accountId+'/token',{method:'POST',body:{}});secret=r.token;keyOpen=true;accounts=accounts.map(a=>a.id===accountId?{...a,connected:1}:a);});
@@ -94,9 +95,9 @@
   <div class="toolbar"><SelectField value={contestId} options={contests.map(c=>({value:c.id,label:c.name+(c.status==='ended'?' · 종료':' · 진행 중')}))} ariaLabel="대회 선택" onchange={chooseContest}/><span class="grow"></span>
     {#if contest?.status==='active'}<button class="btn sm" disabled={busy||offline} onclick={end}>대회 종료</button>{:else}<button class="btn primary sm" disabled={busy||offline} onclick={()=>createOpen=true}>새 대회</button>{/if}
   </div>
-  <div class="season"><span class="eyebrow">동일 초기 자금</span><strong class="num">{won(contest?.initial_cash||0)}</strong><p>매매 수수료 {contest?.fee_bps}bp · 슬리피지 {contest?.slippage_bps}bp · 다음 거래일 시가 체결</p></div>
-  <p class="notice">{rules?.performance}</p>
-  <div class="competition"><section aria-label="계좌 비교"><div class="section-head"><h2>계좌 비교</h2><span>가격·환율 기준 · 종가 평가</span></div>
+  <div class="season"><span class="eyebrow">동일 초기 자금</span><strong class="num">{won(contest?.initial_cash||0)}</strong><p>매매 수수료 {contest?.fee_bps}bp · 슬리피지 {contest?.slippage_bps}bp</p><p>{selectedRules?.execution}</p></div>
+  <p class="notice">{selectedRules?.performance}</p>
+  <div class="competition"><section aria-label="계좌 비교"><div class="section-head"><h2>계좌 비교</h2><span>가격·환율 기준 · 지연 시세</span></div>
     {#each ranking as a,i (a.id)}
       <button class="rank" class:selected={accountId===a.id} onclick={()=>chooseAccount(a.id)}>
         <span class="rank-no">{i+1}</span><span class="person"><b>{a.name}</b><small>{a.holdings.length}종목 · 현금 {won(a.cash)}</small></span>
@@ -110,13 +111,14 @@
         {#each [['holdings','보유'],['orders','주문·체결'],['research','분석'],['connection','에이전트 연결']] as [key,label]}<button class:on={section===key} aria-pressed={section===key} onclick={()=>section=key}>{label}</button>{/each}
       </div>
       {#if section==='holdings'}
-        <div class="totals"><div><span>평가 자산</span><b class="num">{current.equity==null?'계산 대기':won(current.equity)}</b></div><div><span>주문 가능 현금</span><b class="num">{won(current.cash)}</b></div><div><span>일별 최대 낙폭</span><b class="num down">{pctSigned(detail.performance.max_drawdown_pct)}</b></div></div>
+        <div class="totals"><div><span>평가 자산</span><b class="num">{current.equity==null?'계산 대기':won(current.equity)}</b></div><div><span>주문 가능 현금</span><b class="num">{won(current.cash)}</b></div><div><span>일별 최대 낙폭</span><b class="num down">{detail.performance.max_drawdown_pct==null?'계산 대기':pctSigned(detail.performance.max_drawdown_pct)}</b></div></div>
         {#if !current.holdings.length}<p class="empty small">아직 보유 종목이 없습니다. 분석을 기록한 뒤 주문해 보세요.</p>{/if}
-        {#each current.holdings as p (p.security_id)}<div class="holding"><div><b>{p.name}</b><small>{p.ticker} · {qtyStr(p.qty)}주</small><small>지연 종가 {p.price_date||'없음'}{p.currency==='USD'?' · 환율 '+(p.fx_date||'없음'):''}</small></div><div class="result"><b>{p.value_krw==null?'시세 없음':won(p.value_krw)}</b><small>{p.price==null?'—':p.currency==='USD'?usd(p.price):won(p.price)}</small><small class={tonePct(p.pnl_krw||0)}>평가손익 {p.pnl_krw==null?'—':won(p.pnl_krw)}</small></div></div>{/each}
+        {#each current.holdings as p (p.security_id)}<div class="holding"><div><b>{p.name}</b><small>{p.ticker} · {qtyStr(p.qty)}주</small><small>{p.price_at?'지연 시세 '+stamp(p.price_at):'지연 종가 '+(p.price_date||'없음')}{p.currency==='USD'?' · 환율 '+(p.fx_date||'없음'):''}</small>{#if p.stale}<small>평가 대기 · {p.market_detail||'시세 확인 필요'}</small>{/if}</div><div class="result"><b>{p.value_krw==null?'시세 없음':won(p.value_krw)}</b><small>{p.stale||p.price==null?'—':p.currency==='USD'?usd(p.price):won(p.price)}</small><small class={tonePct(p.pnl_krw||0)}>평가손익 {p.pnl_krw==null?'—':won(p.pnl_krw)}</small></div></div>{/each}
         {#if detail.performance.snapshots.length}<details><summary>일별 평가 기록</summary>{#each detail.performance.snapshots as s}<div class="line"><span>{s.date}</span><span class="num">{won(s.equity)}</span></div>{/each}</details>{/if}
       {:else if section==='orders'}
         {#if !detail.orders.length}<p class="empty small">접수한 주문이 없습니다.</p>{/if}
-        {#each detail.orders as o (o.id)}<details class="record"><summary><span><b class={o.side==='buy'?'up':'down'}>{o.side==='buy'?'매수':'매도'}</b> {o.name} · {qtyStr(o.qty)}주<small>{stamp(o.created_at)}</small></span><span>{labels[o.status]}</span></summary><p>{o.reason}</p><small>연결 분석 {o.thesis_id}</small>{#if o.fill_date}<p>{o.fill_date} · {o.currency==='USD'?usd(o.fill_price):won(o.fill_price)} · 비용 {won(o.fee_krw)}{o.currency==='USD'?' · 환율 '+o.fx.toLocaleString('ko-KR')+'원 ('+o.fx_date+')':''}</p>{/if}{#if o.status_reason}<p>{o.status_reason}</p>{/if}{#if o.status==='pending'}<button class="btn sm" disabled={disabled} onclick={()=>cancel(o.id)}>주문 취소</button>{/if}</details>{/each}
+        {#each detail.orders as o (o.id)}<details class="record"><summary><span><b class={o.side==='buy'?'up':'down'}>{o.side==='buy'?'매수':'매도'}</b> {o.name} · {qtyStr(o.qty)}주<small>접수 {stamp(o.created_at)}</small></span><span>{labels[o.display_status||o.status]}</span></summary><p>{o.reason}</p><small>연결 분석 {o.thesis_id}</small>{#if o.fill_date}<p>체결 {o.fill_at?stamp(o.fill_at):o.fill_date} · {o.currency==='USD'?usd(o.fill_price):won(o.fill_price)} · 수수료 {won(o.fee_krw)}{o.currency==='USD'?' · 환율 '+o.fx.toLocaleString('ko-KR')+'원 ('+o.fx_date+')':''}</p>{#if o.quote_end}<small>시세 기준 {o.price_source==='yahoo:15m-open'?'시가 '+stamp(o.quote_start):'15분봉 종가 '+stamp(o.quote_end)} · 원가격 {o.currency==='USD'?usd(o.fill_raw_price):won(o.fill_raw_price)} · 슬리피지 {o.slippage_bps}bp</small>{/if}{/if}{#if o.status_reason}<p>{o.status_reason}</p>{/if}{#if o.status==='pending'}<p class="msg">{o.market_status==='hold'?(o.market_detail||'시세 확인 필요'):'정규장 시세·환율 확인 대기'}</p><button class="btn sm" disabled={disabled} onclick={()=>cancel(o.id)}>주문 취소</button>{/if}</details>{/each}
+        {#if detail.adjustments?.length}<h3>분할·병합 조정 이력</h3>{#each detail.adjustments as x}<div class="line"><span>{x.name} · {x.market_date}<small>{x.denominator}주 → {x.numerator}주 · {qtyStr(x.qty_before)}주 → {qtyStr(x.qty_after)}주</small></span><span>{x.cash_krw>0?'소수주 정산 '+won(x.cash_krw):'현금 정산 없음'}</span></div>{/each}{/if}
         <p class="msg">최근 {detail.orders.length}건 / 전체 {detail.total}건. 전체 기록은 에이전트 도구에서 페이지별로 조회할 수 있습니다.</p>
       {:else if section==='research'}
         {#if !detail.theses.length}<p class="empty small">아직 분석이 없습니다. 저장한 분석은 새 버전으로만 추가됩니다.</p>{/if}
@@ -131,7 +133,7 @@
 {/if}
 
 <Sheet bind:open={createOpen} title="대회 만들기">
-  <form onsubmit={e=>{e.preventDefault();create();}} class="form"><label>대회 이름<input bind:value={name} required maxlength="100" /></label><label>1인 초기 자금 (원)<input type="number" bind:value={initial} min="10000" max="1000000000000" required /></label><div class="pair"><label>매매 수수료 (bp)<input type="number" bind:value={fee} min="0" max="100" step="0.1" required /></label><label>슬리피지 (bp)<input type="number" bind:value={slippage} min="0" max="100" step="0.1" required /></label></div><p class="msg">1bp = 0.01%. 한유민·김유안·박아연·이정안에게 같은 자금을 배정합니다. 규칙은 개설 후 수정할 수 없습니다.</p><p class="notice">가격·환율 기준 예비 운용입니다. 배당·분할은 자동 반영되지 않습니다.</p>{#if error}<p class="msg bad" role="alert">{error}</p>{/if}<button class="btn primary" disabled={busy||offline}>네 계좌로 시작</button></form>
+  <form onsubmit={e=>{e.preventDefault();create();}} class="form"><label>대회 이름<input bind:value={name} required maxlength="100" /></label><label>1인 초기 자금 (원)<input type="number" bind:value={initial} min="10000" max="1000000000000" required /></label>{#if rules?.version!=='1'}<label>체결 방식<SelectField bind:value={executionMode} options={[{value:'intraday',label:'장중 15분봉'},{value:'open',label:'정규장 시가 전용'}]} ariaLabel="대회 체결 방식"/></label><p class="msg">{rulesByVersion[executionMode==='open'?'3':'2']?.execution}</p>{/if}<div class="pair"><label>매매 수수료 (bp)<input type="number" bind:value={fee} min="0" max="100" step="0.1" required /></label><label>슬리피지 (bp)<input type="number" bind:value={slippage} min="0" max="100" step="0.1" required /></label></div><p class="msg">1bp = 0.01%. 한유민·김유안·박아연·이정안에게 같은 자금을 배정합니다. 규칙은 개설 후 수정할 수 없습니다.</p><p class="notice">{rules?.performance}</p>{#if error}<p class="msg bad" role="alert">{error}</p>{/if}<button class="btn primary" disabled={busy||offline}>네 계좌로 시작</button></form>
 </Sheet>
 <Sheet bind:open={thesisOpen} title="분석 기록" guardClose={()=>true}>
   <form class="form" onsubmit={e=>{e.preventDefault();save();}}><SecuritySearch id="sim-security-search" label="모의투자 종목 검색·추가" searchPath="/sim/search" onpick={addSecurity}/><SelectField bind:value={securityId} options={securities.map(s=>({value:String(s.id),label:s.name+' · '+s.ticker}))} ariaLabel="분석 종목"/>
@@ -139,7 +141,7 @@
     <label>투자 논리<textarea bind:value={thesis} required maxlength="20000"></textarea></label><label>가치평가<textarea bind:value={valuation} required maxlength="20000"></textarea></label><label>시나리오<textarea bind:value={scenarios} required maxlength="20000"></textarea></label><label>위험<textarea bind:value={risks} required maxlength="20000"></textarea></label><label>철회 조건<textarea bind:value={invalidation} required maxlength="20000"></textarea></label><label>출처<textarea bind:value={sources} required maxlength="20000" placeholder="자료 주소와 확인한 내용을 적어 주세요."></textarea></label>{#if error}<p class="msg bad" role="alert">{error}</p>{/if}<button class="btn primary" disabled={busy||offline||!securityId}>새 분석 버전 저장</button></form>
 </Sheet>
 <Sheet bind:open={orderOpen} title="모의 주문" guardClose={()=>true}>
-  <form class="form" onsubmit={e=>{e.preventDefault();send();}}><SelectField bind:value={thesisId} options={(detail?.theses||[]).map(t=>({value:t.id,label:t.name+' · '+stamp(t.created_at)}))} ariaLabel="주문 근거 분석 버전"/><SelectField bind:value={side} options={[{value:'buy',label:'매수'},{value:'sell',label:'매도'}]} ariaLabel="매매 방향"/><label>수량 (주)<input type="number" bind:value={qty} min="1" max="1000000000" step="1" required /></label><label>주문 이유·비중 근거<textarea bind:value={reason} required maxlength="5000"></textarea></label><p class="msg">다음 거래일 시가에 비용을 반영합니다. 체결 시 현금이나 수량이 부족하면 거절됩니다.</p>{#if error}<p class="msg bad" role="alert">{error}</p>{/if}<button class="btn primary" disabled={busy||offline||!thesisId}>주문 접수</button></form>
+  <form class="form" onsubmit={e=>{e.preventDefault();send();}}><SelectField bind:value={thesisId} options={(detail?.theses||[]).map(t=>({value:t.id,label:t.name+' · '+stamp(t.created_at)}))} ariaLabel="주문 근거 분석 버전"/><SelectField bind:value={side} options={[{value:'buy',label:'매수'},{value:'sell',label:'매도'}]} ariaLabel="매매 방향"/><label>수량 (주)<input type="number" bind:value={qty} min="1" max="1000000000" step="1" required /></label><label>주문 이유·비중 근거<textarea bind:value={reason} required maxlength="5000"></textarea></label><p class="msg">{selectedRules?.execution} 체결 시 현금이나 수량이 부족하면 거절됩니다.</p>{#if error}<p class="msg bad" role="alert">{error}</p>{/if}<button class="btn primary" disabled={busy||offline||!thesisId}>주문 접수</button></form>
 </Sheet>
 <Sheet bind:open={keyOpen} title="에이전트 접속키" onclose={()=>secret=''}><div class="form"><p>이 창을 닫으면 키를 다시 볼 수 없습니다. 에이전트의 연결 설정에 저장해 주세요.</p><textarea readonly value={secret} aria-label="새 모의투자 접속키"></textarea><p class="msg">키는 서버에 해시로만 저장됩니다. 기존 키가 있었다면 폐기되었습니다.</p></div></Sheet>
 

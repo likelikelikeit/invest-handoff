@@ -1,0 +1,18 @@
+name = "invest-simulation-cron"
+main = "src/simulation-worker.js"
+compatibility_date = "2026-09-01"
+workers_dev = false
+preview_urls = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "invest"
+database_id = "50f995f4-8055-4b85-94c5-a90aeba7abf8"
+migrations_dir = "migrations"
+
+[[services]]
+binding = "SIM_FEED"
+service = "invest-simulation-feed"
+
+[triggers]
+crons = ["*/5 * * * *"]
