@@ -24,6 +24,18 @@ describe('대회 종료 공통 평가 스냅샷',()=>{
     expect(after).toMatchObject({equity:112000,cash:100000,at:ended.toISOString()});
     expect(after.holdings[0].price).toBe(1200);
   });
+  it('장이 닫힌 뒤 종료해도 그날 일봉이 없으면 마지막 15분봉을 쓴다',async()=>{
+    const evening=new Date('2026-10-27T09:00:00Z'); // 18:00 KST
+    env.DB.raw.prepare("INSERT INTO sim_prices(security_id,date,open,close) VALUES(?,?,?,?)").run(sid,'2026-10-26',1100,1150);
+    await finishSimulationContest(env,cid,evening);
+    expect((await getAccount(env,aid,evening)).holdings[0].price).toBe(1200);
+  });
+  it('장 마감 뒤 그날 일봉이 있으면 동시호가가 반영된 종가로 평가한다',async()=>{
+    const evening=new Date('2026-10-27T09:00:00Z');
+    env.DB.raw.prepare("INSERT INTO sim_prices(security_id,date,open,close) VALUES(?,?,?,?)").run(sid,'2026-10-27',1190,1250);
+    await finishSimulationContest(env,cid,evening);
+    expect(await getAccount(env,aid,evening)).toMatchObject({equity:112500,complete:true});
+  });
   it('시세가 누락되면 수익률을 추정하지 않고 비어 있는 상태로 고정한다',async()=>{
     env.DB.raw.exec('DELETE FROM sim_intraday_quotes');
     await finishSimulationContest(env,cid,ended);

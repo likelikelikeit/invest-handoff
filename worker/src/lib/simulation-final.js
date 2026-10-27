@@ -6,13 +6,18 @@ export async function finishSimulationContest(env, contestId, now = new Date()) 
   const at = now.toISOString(), kr = completedDate(now,'KR'), us = completedDate(now,'US');
   const krMax = withinUsualSession(now,'KR') ? 5400 : 604800;
   const usMax = withinUsualSession(now,'US') ? 5400 : 604800;
+  // 장이 닫힌 뒤 종료하면 그날 일봉 종가를 쓴다. 한국 15분봉은 15:00에서 끝나 동시호가 종가가 빠지기 때문이다.
+  // 그날 일봉이 아직 없으면 마지막 15분봉을 그대로 쓴다.
+  const krClosed = withinUsualSession(now,'KR') ? 0 : 1, usClosed = withinUsualSession(now,'US') ? 0 : 1;
+  const daily = `px.close>0 AND ((s.market='KR' AND ${krClosed}=1 AND px.date='${kr}') OR (s.market='US' AND ${usClosed}=1 AND px.date='${us}'))`;
   const holdings = env.DB.prepare(`INSERT INTO sim_final_holdings(account_id,security_id,name,ticker,currency,market,qty,cost_krw,price,price_at,fx,fx_date)
     SELECT a.id,s.id,s.name,s.ticker,s.currency,s.market,p.qty,p.cost_krw,
       CASE WHEN c.rules_version IN ('2','3') THEN
-        CASE WHEN mc.status='ok' AND mc.verified_at<=? AND iq.price_at<=? AND
+        CASE WHEN ${daily} THEN px.close
+          WHEN mc.status='ok' AND mc.verified_at<=? AND iq.price_at<=? AND
           (strftime('%s',?)-strftime('%s',iq.price_at)) BETWEEN 0 AND CASE s.market WHEN 'KR' THEN ? ELSE ? END THEN iq.price END
       ELSE CASE WHEN px.date IS NOT NULL AND julianday(CASE s.market WHEN 'KR' THEN ? ELSE ? END)-julianday(px.date)<=7 THEN px.close END END,
-      CASE WHEN c.rules_version IN ('2','3') THEN iq.price_at ELSE px.date END,
+      CASE WHEN c.rules_version IN ('2','3') THEN CASE WHEN ${daily} THEN px.date ELSE iq.price_at END ELSE px.date END,
       CASE WHEN s.currency='KRW' THEN 1 WHEN fx.date IS NOT NULL AND julianday(?)-julianday(fx.date)<=7 THEN fx.close END,
       CASE WHEN s.currency='USD' THEN fx.date ELSE NULL END
     FROM sim_accounts a JOIN sim_contests c ON c.id=a.contest_id JOIN sim_positions p ON p.account_id=a.id AND p.qty>0.000001
