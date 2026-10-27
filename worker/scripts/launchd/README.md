@@ -22,3 +22,18 @@ OpenDART는 Cloudflare 서버 요청을 오류 페이지로 돌려보낸다(302 
 5. 확인: `launchctl list | grep invest`, `~/Library/Logs/invest-dart-sync.log`, 또는 D1 meta `cron:dart`. 실패하면 작업실 텔레그램 봇이 알린다.
 
 2026-10-22 설치됨(Agent Workshop 세션): 과거 이력 완료, LaunchAgent 등록·수동 실행 exit 0, 실패 알림 연결.
+
+## 모의투자 매일 점검 (2026-10-27 추가)
+
+`scripts/sim-check.mjs`는 진행 중인 모의투자 대회를 읽기만 하고 점검한다: 체결 Worker 실행·오류, 시세 보류 종목, 막힌 미체결 주문, 환율·평가 시세 신선도, 현금 원장(초기 자금 + 체결 + 분할 정산 = 현재 현금), 음수 잔고·보유, 07:10 일별 스냅샷, 지난 24시간 체결·거절·분할. 문제가 있으면 종료 코드 1이라 `run-with-alert`가 알린다. 대회가 없으면 바로 끝난다.
+
+토큰은 위 `~/.invest-handoff.env`를 그대로 쓴다. `com.invest.sim-check.plist`의 `/Users/ME`를 바꾸고 등록한다(07:30 KST에 한 번).
+
+```bash
+chmod +x scripts/launchd/sim-check.sh
+cp scripts/launchd/com.invest.sim-check.plist ~/Library/LaunchAgents/
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.invest.sim-check.plist 2>/dev/null || true
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.invest.sim-check.plist
+```
+
+손으로 돌릴 때: `cd worker && node scripts/sim-check.mjs` (PC에서는 `npx wrangler login`만 돼 있으면 된다). 결과는 `~/Library/Logs/invest-sim-check.log`.

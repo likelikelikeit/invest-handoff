@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 모의투자 매일 점검. 07:30 KST(미국장 마감·체결과 07:10 일별 스냅샷 뒤)에 한 번.
+     문제가 있으면 종료 코드 1 → run-with-alert가 알린다. 결과 전체는 로그 파일에 남는다.
+     /Users/ME 는 맥 미니 계정 홈으로 바꾼다. 맥 시간대가 한국이어야 07:30이 KST다. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.invest.sim-check</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/ME/bin/run-with-alert</string>
+    <string>모의투자 매일 점검</string>
+    <string>/bin/zsh</string>
+    <string>/Users/ME/invest-handoff/worker/scripts/launchd/sim-check.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+  <key>StandardOutPath</key><string>/Users/ME/Library/Logs/invest-sim-check.log</string>
+  <key>StandardErrorPath</key><string>/Users/ME/Library/Logs/invest-sim-check.log</string>
+</dict>
+</plist>
